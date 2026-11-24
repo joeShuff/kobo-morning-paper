@@ -40,7 +40,6 @@ DEFAULTS = {
     "genres": ["fiction", "fantasy"],
     "extra_rules": [],                    # extra plain-English rules appended to interests.json
     "lead_image_avoid_faces": True,       # skip photos with a prominent face for lead images
-    "library_owner": "1000:1000",         # uid:gid that owns your Calibre library
     "kickstarter_enabled": False,         # needs KOBO_IMAP_USER / KOBO_IMAP_PASSWORD
     "imap_host": "imap.gmail.com",
     "imap_folder": "[Gmail]/All Mail",
