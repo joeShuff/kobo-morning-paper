@@ -1,35 +1,19 @@
 #!/usr/bin/env python3
-"""Build one daily EPUB "newspaper" from queued article URLs and refresh it in Calibre.
+"""Build a dated daily EPUB newspaper from queued article URLs.
 
-Designed so the paper syncs to a Kobo through Calibre-Web's Kobo Sync: ONE Calibre book
-that is refreshed every day, not a new file per batch.
+1. Fetch and extract queued URLs into articles/ as individual JSON records.
+2. Rebuild a dated EPUB with a generated cover and tappable front page.
+3. Copy the dated EPUB atomically into each configured output ingest folder.
 
-  1. For each URL in queue.txt not already stored: fetch + extract clean article text
-     with trafilatura and save one JSON per article under articles/. Failures are logged
-     and dropped from the queue (not retried forever).
-  2. Rebuild ONE EPUB (read-later.epub) from ALL stored articles with ebooklib, newest
-     first, one chapter each, with a generated cover and a tappable front page.
-  3. Update the single Calibre book in place with calibredb (add_format), refresh its
-     KEPUB, put it on the Calibre-Web kobo_sync shelf, and restart Calibre-Web so Kobo
-     Sync offers the refreshed book.
-
-URLs reach queue.txt from the curation step (see README) or from scripts/kobo-queue.py.
-
-Usage:
-  kobo-digest-build.py                    full run (needs Calibre; see config.json)
-  kobo-digest-build.py --dry-build DIR    build only the EPUB from DIR/articles/*.json.
-                                          No network, no Calibre, nothing outside DIR.
-
-All settings live in config.json (see config.example.json).
+The local EPUB is always written to data_dir. External ingest folders are optional
+and configured with output_ingest_dirs in config.json.
 """
 import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -45,15 +29,11 @@ BASE = DATA_DIR
 QUEUE = BASE / "queue.txt"
 ARTICLES = BASE / "articles"
 EPUB_OUT = BASE / "read-later.epub"
-BOOK_ID_FILE = BASE / "book_id.txt"
 LOG = BASE / "build.log"
 
-CALIBRE_LIB_HOST = CFG["calibre_library"]   # bind-mounted into the calibredb container
-BOOK_TITLE = CFG["book_title"]
-BOOK_AUTHOR = CFG["book_author"]
 PAPER_TITLE = CFG["paper_title"]
 PAPER_TAGLINE = CFG["paper_tagline"]
-BOOKORBIT_INGEST_DIR = CFG.get("bookorbit_ingest_dir", "")
+OUTPUT_INGEST_DIRS = CFG.get("output_ingest_dirs", [])
 
 
 def edition_date():
@@ -687,7 +667,7 @@ def build_epub(articles: list[dict]) -> None:
     book.set_identifier(f"morning-paper-{day.isoformat()}")  # distinct identifier for each dated edition
     book.set_title(title)
     book.set_language("en")
-    book.add_author(BOOK_AUTHOR)
+    book.add_author("The Morning Paper")
     book.add_metadata("DC", "date", day.isoformat())
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     book.add_metadata("DC", "description", f"{title}. Saved articles digest. Built {stamp}.")
@@ -751,173 +731,60 @@ def build_epub(articles: list[dict]) -> None:
     log(f"built EPUB with {len(chapters)} article(s) + interactive front page -> {EPUB_OUT}")
 
 
-def publish_to_bookorbit_ingest() -> bool:
-    """Atomically publish this dated EPUB into BookOrbit's configured ingest folder.
+def publish_to_output_ingest_dirs() -> bool:
+    """Atomically copy this dated EPUB into every configured ingest folder.
 
-    The folder must already exist and be writable by the pipeline process. BookOrbit
-    remains responsible for importing the EPUB; this script only stages the file.
+    Each destination must already exist and be writable. A failed destination
+    makes the run fail so the queue is retained and publishing can be retried.
     """
-    if not BOOKORBIT_INGEST_DIR:
-        return False
-
-    ingest_dir = Path(BOOKORBIT_INGEST_DIR).expanduser()
-    if not ingest_dir.is_dir():
-        log(f"BookOrbit ingest skipped: configured directory does not exist: {ingest_dir}")
-        return False
+    if not OUTPUT_INGEST_DIRS:
+        log("no output ingest folders configured; EPUB remains in data_dir")
+        return True
 
     safe_title = re.sub(r"[^a-z0-9]+", "-", PAPER_TITLE.lower()).strip("-") or "morning-paper"
-    destination = ingest_dir / f"{safe_title}-{edition_date().isoformat()}.epub"
-    temp_path = None
-    try:
-        fd, temp_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=ingest_dir)
-        os.close(fd)
-        temp_path = Path(temp_name)
-        shutil.copy2(EPUB_OUT, temp_path)
-        # mkstemp creates mode 0600; make the staged EPUB readable by BookOrbit's
-        # scanner even when it runs under a different user in a shared volume.
-        os.chmod(temp_path, 0o644)
-        os.replace(temp_path, destination)
-        log(f"published dated BookOrbit edition -> {destination}")
-        return True
-    except OSError as exc:
-        log(f"BookOrbit ingest publish failed: {type(exc).__name__}: {exc}")
-        return False
-    finally:
-        if temp_path and temp_path.exists():
-            try:
-                temp_path.unlink()
-            except OSError:
-                pass
-
-
-def calibredb(args: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
-    """Run calibredb against the live library via the linuxserver/calibre image,
-    mirroring the pattern annas-fetch uses. EPUB_OUT is mounted read-only."""
-    cmd = ["docker", "run", "--rm",
-           "-v", f"{CALIBRE_LIB_HOST}:/books",
-           "-v", f"{EPUB_OUT.parent}:/staged:ro",
-           "--entrypoint", "/usr/bin/calibredb",
-           CFG["calibre_docker_image"]] + args
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-
-
-def update_calibre_book() -> int:
-    staged = f"/staged/{EPUB_OUT.name}"
-    book_id = None
-    if BOOK_ID_FILE.exists():
+    filename = f"{safe_title}-{edition_date().isoformat()}.epub"
+    all_ok = True
+    for configured_dir in OUTPUT_INGEST_DIRS:
+        ingest_dir = Path(configured_dir).expanduser()
+        if not ingest_dir.is_dir():
+            log(f"output ingest skipped: directory does not exist: {ingest_dir}")
+            all_ok = False
+            continue
+        destination = ingest_dir / filename
+        temp_path = None
         try:
-            book_id = int(BOOK_ID_FILE.read_text().strip())
-        except ValueError:
-            book_id = None
-    if book_id:
-        r = calibredb(["add_format", str(book_id), staged, "--with-library", "/books"])
-        if r.returncode == 0:
-            log(f"replaced EPUB on Calibre book {book_id}")
-            # Refresh the KEPUB too, or the Kobo keeps getting a plain EPUB / a stale kepub.
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
-            from kepub_ensure import ensure_kepub
-            log("refreshed KEPUB" if ensure_kepub(book_id, replace=True, backup=False)
-                else "KEPUB refresh failed (kepub-sweep will retry)")
-            # The Kobo fetches its cover thumbnail from calibre-web's cover endpoint,
-            # which serves the LIBRARY cover file, not the EPUB's embedded image. The
-            # EPUB replace alone leaves that file stale, so the device keeps showing the
-            # old cover. Push the freshly generated cover into the library too.
-            if COVER_OUT.exists():
-                rc = calibredb(["set_metadata", str(book_id),
-                                "--field", f"cover:/staged/{COVER_OUT.name}",
-                                "--with-library", "/books"])
-                log("updated library cover" if rc.returncode == 0
-                    else f"library cover update failed ({rc.stderr.strip()[:80]})")
-            return book_id
-        log(f"add_format failed ({r.stderr.strip()[:120]}); recreating the book")
-    # create the book fresh and record its id
-    r = calibredb(["add", staged, "--with-library", "/books",
-                   "--title", BOOK_TITLE, "--authors", BOOK_AUTHOR, "--languages", "en"])
-    out = (r.stdout or "") + (r.stderr or "")
-    import re
-    m = re.search(r"Added book ids?:\s*(\d+)", out)
-    if not m:
-        raise SystemExit(f"calibredb add did not return a book id: {out[:200]}")
-    new_id = int(m.group(1))
-    BOOK_ID_FILE.write_text(str(new_id))
-    log(f"created Calibre book id {new_id}")
-    return new_id
-
-
-CW_APP_DB = CFG["calibre_web_app_db"]  # Calibre-Web config (users/shelves/kobo sync)
-
-
-def ensure_on_kobo_shelf(book_id: int) -> None:
-    """Calibre-Web's Kobo Sync is shelf-restricted: only books on a shelf with
-    kobo_sync=1 reach the Kobo. Make sure the digest book is on that shelf, so a
-    refresh (or a recreate with a new id) can never silently drop out of sync."""
-    import sqlite3
-    from datetime import datetime as _dt
-    try:
-        c = sqlite3.connect(CW_APP_DB, timeout=10)
-        shelf = c.execute("SELECT id FROM shelf WHERE kobo_sync=1 ORDER BY id LIMIT 1").fetchone()
-        if not shelf:
-            log("no kobo_sync shelf in Calibre-Web; cannot ensure sync scope")
-            c.close()
-            return
-        sid = shelf[0]
-        now = _dt.utcnow()
-        exists = c.execute("SELECT 1 FROM book_shelf_link WHERE book_id=? AND shelf=?",
-                           (book_id, sid)).fetchone()
-        if exists:
-            # CRITICAL for re-sync: in only_kobo_shelves mode calibre-web's kobo.py
-            # selects changed books by `BookShelf.date_added > sync_token watermark`,
-            # NOT by book.last_modified. Replacing the EPUB bumps the book's
-            # last_modified but leaves date_added untouched, so the Kobo would see
-            # "Books to Sync: 0" and never pull the refreshed digest. Re-touch
-            # date_added to now on every build so each refresh clears the watermark.
-            c.execute("UPDATE book_shelf_link SET date_added=? WHERE book_id=? AND shelf=?",
-                      (now, book_id, sid))
-            # Also clear calibre-web's "already synced" record. kobo.py excludes any
-            # book already in kobo_synced_books (`Books.id.notin_(...)`), so a re-touched
-            # date_added alone is NOT enough — the book stays filtered out and the Kobo
-            # sees "Books to Sync: 0". Because we edit the book outside calibre-web, it
-            # never removes the synced marker itself. Delete it so the digest re-offers
-            # as a fresh entitlement and the Kobo re-downloads the refreshed EPUB.
-            try:
-                c.execute("DELETE FROM kobo_synced_books WHERE book_id=?", (book_id,))
-            except Exception:
-                pass
-            c.commit()
-            log(f"re-touched shelf {sid} date_added + cleared synced marker for book {book_id} (forces Kobo re-sync)")
-        else:
-            mx = c.execute("SELECT COALESCE(MAX([order]),0) FROM book_shelf_link WHERE shelf=?",
-                           (sid,)).fetchone()[0]
-            c.execute("INSERT INTO book_shelf_link (book_id,[order],shelf,date_added) VALUES (?,?,?,?)",
-                      (book_id, mx + 1, sid, now))
-            c.commit()
-            log(f"added book {book_id} to kobo_sync shelf {sid}")
-        c.close()
-    except Exception as e:
-        log(f"ensure_on_kobo_shelf failed: {type(e).__name__}")
-
-
-def restart_calibre_web() -> None:
-    try:
-        subprocess.run(["docker", "restart", CFG["calibre_web_container"]], capture_output=True, timeout=60)
-        log("restarted calibre-web (so Kobo Sync offers the refreshed book)")
-    except Exception as e:
-        log(f"calibre-web restart failed: {type(e).__name__}")
+            fd, temp_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=ingest_dir)
+            os.close(fd)
+            temp_path = Path(temp_name)
+            shutil.copy2(EPUB_OUT, temp_path)
+            os.chmod(temp_path, 0o644)
+            os.replace(temp_path, destination)
+            log(f"published dated edition -> {destination}")
+        except OSError as exc:
+            all_ok = False
+            log(f"output ingest publish failed for {ingest_dir}: {type(exc).__name__}: {exc}")
+        finally:
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+    return all_ok
 
 
 def main(argv=None) -> int:
-    global BASE, QUEUE, ARTICLES, EPUB_OUT, BOOK_ID_FILE, LOG, FONTS, MAST_FONT, SERIF_B, SERIF_R
+    global BASE, QUEUE, ARTICLES, EPUB_OUT, LOG, FONTS, MAST_FONT, SERIF_B, SERIF_R
     global COVER_OUT, EDITION_FILE
     argv = sys.argv[1:] if argv is None else argv
     dry = None
     if "--dry-build" in argv:
         # Dry build: work entirely inside DIR (articles/ and, optionally, fonts/ live
-        # there). No network, no Calibre, no calibre-web restart, no queue clear, and the
+        # there). No network, no external publishing, no queue clear, and the
         # real edition counter is not touched.
         dry = Path(argv[argv.index("--dry-build") + 1])
         BASE = dry
         QUEUE, ARTICLES = BASE / "queue.txt", BASE / "articles"
-        EPUB_OUT, BOOK_ID_FILE, LOG = BASE / "read-later.epub", BASE / "book_id.txt", BASE / "build.log"
+        EPUB_OUT, LOG = BASE / "read-later.epub", BASE / "build.log"
         FONTS = BASE / "fonts"
         MAST_FONT = str(FONTS / CFG["masthead_font"])
         SERIF_B = str(FONTS / CFG["serif_bold_font"])
@@ -933,22 +800,19 @@ def main(argv=None) -> int:
         log("failed URLs: " + ", ".join(f"{reason}: {url}" for url, reason in failed))
     articles = load_all_articles()
     if not articles:
-        log("no articles could be extracted; not touching Calibre")
+        log("no articles could be extracted; not publishing")
         return 1
     build_epub(articles)
     if dry:
-        log(f"DRY BUILD DONE: {len(articles)} items -> {EPUB_OUT} (no Calibre, no external publishing)")
+        log(f"DRY BUILD DONE: {len(articles)} items -> {EPUB_OUT} (no external publishing)")
         return 0
-    publish_to_bookorbit_ingest()
-    if not CFG["calibre_enabled"]:
-        log(f"calibre_enabled is false: built {EPUB_OUT}, not touching Calibre")
-        return 0
-    book_id = update_calibre_book()
-    ensure_on_kobo_shelf(book_id)
-    restart_calibre_web()
-    # clear the queue: everything queued was either stored or logged as failed
+    if not publish_to_output_ingest_dirs():
+        log("one or more output ingest folders failed; keeping queue for retry")
+        return 1
+    # Clear only after the EPUB is built and every configured output has received it.
+    # Failed article URLs have already been logged and are intentionally dropped.
     QUEUE.write_text("")
-    log(f"DONE: +{added} new, {len(failed)} failed, {len(articles)} total in digest, Calibre book {book_id}")
+    log(f"DONE: +{added} new, {len(failed)} failed, {len(articles)} total in digest -> {EPUB_OUT}")
     return 0
 
 
