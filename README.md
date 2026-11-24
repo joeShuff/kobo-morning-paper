@@ -66,7 +66,7 @@ This repo is the code behind that pipeline. You run it on your own server. Nothi
 
 6. **KEPUB note.** A Kobo handles a KEPUB better than a plain EPUB (for example, highlights survive). `scripts/kepub_ensure.py` converts the EPUB with `kepubify` inside the Calibre-Web container (the linuxserver `calibre-web` image includes it) and adds the KEPUB format to the same book. Set `library_owner` to the uid:gid that owns your library.
 
-6. **Run once by hand.**
+7. **Run once by hand.**
    ```
    .venv/bin/python scripts/kobo-interests.py          # writes interests.json
    cp curate.example.sh curate.sh                       # edit it: your LLM step
@@ -75,7 +75,7 @@ This repo is the code behind that pipeline. You run it on your own server. Nothi
    ```
    Then sync the Kobo. To build only the EPUB without Calibre, set `"calibre_enabled": false`, or run `kobo-digest-build.py --dry-build DIR` against a folder that holds `articles/*.json`.
 
-7. **Schedule.** `crontab.example` has the 5:15 / 5:30 / 6:00 AM lines. Edit the paths and add them to your cron table.
+8. **Schedule.** `crontab.example` has the 5:15 / 5:30 / 6:00 AM lines. Edit the paths and add them to your cron table.
 
 ## Files
 
