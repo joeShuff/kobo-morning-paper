@@ -62,7 +62,9 @@ This repo is the code behind that pipeline. You run it on your own server. Nothi
    - Put the paper book on it. The build script re-adds the book to the first `kobo_sync` shelf on every run and clears Calibre-Web's "already synced" marker, so each refresh is offered again.
    - Calibre-Web must run with Kobo Sync enabled, and the Kobo must be pointed at it (`api_endpoint` in the Kobo's config).
 
-5. **KEPUB note.** A Kobo handles a KEPUB better than a plain EPUB (for example, highlights survive). `scripts/kepub_ensure.py` converts the EPUB with `kepubify` inside the Calibre-Web container (the linuxserver `calibre-web` image includes it) and adds the KEPUB format to the same book. Set `library_owner` to the uid:gid that owns your library.
+5. **BookOrbit (optional).** To publish each daily edition to BookOrbit as a separate dated import, set `bookorbit_ingest_dir` to the absolute path of BookOrbit's configured ingest folder. The directory must already exist and be writable by this pipeline. Each run stages a file such as `the-morning-paper-2026-11-24.epub`; the EPUB title and publication date metadata also include the edition date. The file is copied atomically so BookOrbit cannot pick up a partially written EPUB. Leave the setting empty to disable BookOrbit publishing. This does not change the existing Calibre behaviour: Calibre continues refreshing its one stable book in place.
+
+6. **KEPUB note.** A Kobo handles a KEPUB better than a plain EPUB (for example, highlights survive). `scripts/kepub_ensure.py` converts the EPUB with `kepubify` inside the Calibre-Web container (the linuxserver `calibre-web` image includes it) and adds the KEPUB format to the same book. Set `library_owner` to the uid:gid that owns your library.
 
 6. **Run once by hand.**
    ```
