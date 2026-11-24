@@ -6,6 +6,7 @@
   "max_age_days": 7,
 
   "calibre_enabled": true,
+  "bookorbit_ingest_dir": "",
   "calibre_library": "/path/to/calibre/library",
   "calibre_web_container": "calibre-web",
   "calibre_web_app_db": "/path/to/calibre-web/config/app.db",
