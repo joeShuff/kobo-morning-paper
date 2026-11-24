@@ -17,8 +17,6 @@ DEFAULTS = {
     # The paper itself.
     "paper_title": "The Morning Paper",
     "paper_tagline": "All the Reads Worth Your Time",
-    "book_title": "Read Later",          # the single Calibre book that is refreshed daily
-    "book_author": "Articles",
     "max_age_days": 7,                    # drop articles older than this (pinned.txt bypasses)
     # Fonts for the generated cover and front page (TTF files). See README, "Fonts".
     "fonts_dir": "fonts",                 # relative to data_dir unless absolute
