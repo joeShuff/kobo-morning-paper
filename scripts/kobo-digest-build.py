@@ -773,6 +773,9 @@ def publish_to_bookorbit_ingest() -> bool:
         os.close(fd)
         temp_path = Path(temp_name)
         shutil.copy2(EPUB_OUT, temp_path)
+        # mkstemp creates mode 0600; make the staged EPUB readable by BookOrbit's
+        # scanner even when it runs under a different user in a shared volume.
+        os.chmod(temp_path, 0o644)
         os.replace(temp_path, destination)
         log(f"published dated BookOrbit edition -> {destination}")
         return True
