@@ -24,8 +24,11 @@ All settings live in config.json (see config.example.json).
 """
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,6 +53,19 @@ BOOK_TITLE = CFG["book_title"]
 BOOK_AUTHOR = CFG["book_author"]
 PAPER_TITLE = CFG["paper_title"]
 PAPER_TAGLINE = CFG["paper_tagline"]
+BOOKORBIT_INGEST_DIR = CFG.get("bookorbit_ingest_dir", "")
+
+
+def edition_date():
+    """Return the edition date, allowing deterministic builds via KOBO_DATELINE_DATE."""
+    override = os.environ.get("KOBO_DATELINE_DATE")
+    return datetime.strptime(override, "%Y-%m-%d").date() if override else datetime.now().date()
+
+
+def edition_title() -> str:
+    day = edition_date()
+    return f"{PAPER_TITLE} — {day.day} {day.strftime('%B %Y')}"
+
 
 WORDS_PER_MIN = 200   # reading-speed assumption for the "(N min)" estimate
 CAP_MINUTES = 0       # 0 = NO cap (full text always); >0 truncates to that many min
@@ -542,8 +558,7 @@ def build_front_page(book, articles: list[dict]):
                                     media_type="image/jpeg", content=buf.getvalue()))
         blocks.append((f"images/fp_{n}.jpg", href, pil))
 
-    _ov = os.environ.get("KOBO_DATELINE_DATE")
-    _dt = datetime.strptime(_ov, "%Y-%m-%d") if _ov else datetime.now()
+    _dt = datetime.combine(edition_date(), datetime.min.time())
     try:
         dateline = _dt.strftime("%A, %B %-d, %Y").upper()
     except ValueError:
@@ -667,12 +682,15 @@ def build_front_page(book, articles: list[dict]):
 
 def build_epub(articles: list[dict]) -> None:
     book = epub.EpubBook()
-    book.set_identifier(f"read-later-{int(time.time())}")  # fresh id each build nudges Kobo Sync
-    book.set_title(BOOK_TITLE)
+    day = edition_date()
+    title = edition_title()
+    book.set_identifier(f"morning-paper-{day.isoformat()}")  # distinct identifier for each dated edition
+    book.set_title(title)
     book.set_language("en")
     book.add_author(BOOK_AUTHOR)
+    book.add_metadata("DC", "date", day.isoformat())
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    book.add_metadata("DC", "description", f"Saved articles digest. Refreshed {stamp}.")
+    book.add_metadata("DC", "description", f"{title}. Saved articles digest. Built {stamp}.")
 
     cover = generate_cover(articles)
     if cover and cover.exists():
@@ -731,6 +749,42 @@ def build_epub(articles: list[dict]) -> None:
     book.spine = [front] + chapters
     epub.write_epub(str(EPUB_OUT), book)
     log(f"built EPUB with {len(chapters)} article(s) + interactive front page -> {EPUB_OUT}")
+
+
+def publish_to_bookorbit_ingest() -> bool:
+    """Atomically publish this dated EPUB into BookOrbit's configured ingest folder.
+
+    The folder must already exist and be writable by the pipeline process. BookOrbit
+    remains responsible for importing the EPUB; this script only stages the file.
+    """
+    if not BOOKORBIT_INGEST_DIR:
+        return False
+
+    ingest_dir = Path(BOOKORBIT_INGEST_DIR).expanduser()
+    if not ingest_dir.is_dir():
+        log(f"BookOrbit ingest skipped: configured directory does not exist: {ingest_dir}")
+        return False
+
+    safe_title = re.sub(r"[^a-z0-9]+", "-", PAPER_TITLE.lower()).strip("-") or "morning-paper"
+    destination = ingest_dir / f"{safe_title}-{edition_date().isoformat()}.epub"
+    temp_path = None
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=ingest_dir)
+        os.close(fd)
+        temp_path = Path(temp_name)
+        shutil.copy2(EPUB_OUT, temp_path)
+        os.replace(temp_path, destination)
+        log(f"published dated BookOrbit edition -> {destination}")
+        return True
+    except OSError as exc:
+        log(f"BookOrbit ingest publish failed: {type(exc).__name__}: {exc}")
+        return False
+    finally:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 def calibredb(args: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -880,8 +934,9 @@ def main(argv=None) -> int:
         return 1
     build_epub(articles)
     if dry:
-        log(f"DRY BUILD DONE: {len(articles)} items -> {EPUB_OUT} (no Calibre, no state saved)")
+        log(f"DRY BUILD DONE: {len(articles)} items -> {EPUB_OUT} (no Calibre, no external publishing)")
         return 0
+    publish_to_bookorbit_ingest()
     if not CFG["calibre_enabled"]:
         log(f"calibre_enabled is false: built {EPUB_OUT}, not touching Calibre")
         return 0
