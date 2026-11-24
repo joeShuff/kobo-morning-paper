@@ -23,13 +23,8 @@ DEFAULTS = {
     "masthead_font": "UnifrakturMaguntia-Book.ttf",
     "serif_bold_font": "PT_Serif-Web-Bold.ttf",
     "serif_regular_font": "PT_Serif-Web-Regular.ttf",
-    # Calibre / Calibre-Web (all optional: without them the build stops after writing the EPUB).
-    "calibre_enabled": True,
-    "calibre_library": "/path/to/calibre/library",   # folder that holds metadata.db
-    "calibre_docker_image": "lscr.io/linuxserver/calibre:latest",
-    "calibre_web_container": "calibre-web",
-    "calibre_web_app_db": "/path/to/calibre-web/config/app.db",
-    "kobo_user_id": 1,                    # Calibre-Web user id that owns the Kobo
+    # Optional destinations scanned by external library/import services.
+    "output_ingest_dirs": [],
     # Interest model sources.
     "audiobookshelf_container": "",       # docker container name; empty = skip Audiobookshelf
     "audiobookshelf_db": "/config/absdatabase.sqlite",
