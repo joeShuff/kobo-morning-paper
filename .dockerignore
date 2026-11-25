@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+*.py[cod]
+config.json
+.env
+data
+kobo-articles
+source-ingest
+source-archive
+*.epub
+build.log

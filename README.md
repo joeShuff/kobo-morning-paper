@@ -1,107 +1,124 @@
 # kobo-morning-paper: a daily newspaper EPUB
 
-Every morning a fresh, dated EPUB of about 10 articles is generated. The pipeline is reader-agnostic: it writes a local EPUB and can copy that edition into any number of configured output ingest folders.
+A small, self-hosted pipeline that turns prepared article sources into a dated EPUB newspaper. Other programs are responsible for discovering, selecting and preparing content; this project consumes their files, builds the newspaper and publishes it.
 
-![System design](preview.png)
-
-This repo is the code behind that pipeline. You run it on your own server. Nothing here calls a hosted service except the sites you read and, optionally, your own LLM.
+There is no built-in AI, interest model, source discovery, or integration with Audiobookshelf, Seerr, TikTok or Kickstarter.
 
 ## How it works
 
-1. **Interest model** (`scripts/kobo-interests.py`, 5:15 AM) reads optional sources and writes `interests.json`.
-   - Reading activity 35%: Audiobookshelf progress from the last 30 days.
-   - Media requests 30%: titles you asked your server to fetch (a JSONL log and/or Seerr/Overseerr requests).
-   - Genres 20%: your standing genres from `config.json`.
-   - TikTok 10%: public TikTok collections, read with yt-dlp.
-   - Kickstarter 5%: backed projects, at most one item, read-only over IMAP.
-   - If an optional source fails, its weight moves to Reading activity and Media requests (35:30), and `interests.json` says why.
-2. **Curation** (5:30 AM): an LLM reads `interests.json` and picks about 10 article URLs into `queue.txt`. This step is **yours to plug in**. See `curate.example.sh` for the contract. No curation agent ships in this repo.
-3. **Fetch + extract** (`scripts/kobo-digest-build.py`, 6:00 AM): trafilatura turns each URL into clean article text and stores it under `articles/`.
-4. **Build edition**: ebooklib writes a dated EPUB, newest first, one chapter per article, with a generated cover and tappable front page.
-5. **Publish outputs**: the dated EPUB is copied atomically into every directory listed in `output_ingest_dirs`. The folders can belong to any application that watches an ingest directory; this project does not call any destination-specific API.
+1. **Receive sources.** Other programs write source files into `source_ingest_dir`.
+2. **Read and stage.** At the scheduled run, the ingest runner snapshots the inbox and parses supported files. URL-only entries are fetched and extracted with Trafilatura; entries containing article text or HTML are used directly.
+3. **Build the edition.** The existing article store is combined with the newly supplied content, filtered by the configured age limit, and rendered into a dated EPUB with a generated cover and tappable front page.
+4. **Publish.** The dated EPUB is copied atomically into each configured `output_ingest_dirs` destination.
+5. **Archive inputs.** After the build and all output publishing succeed, the source files from that run are moved into `source_archive_dir/YYYY-MM-DD/`. Files arriving during a run are left for the next edition.
 
-`scripts/kobo-queue.py` is a small intake helper. It reads a message, finds lines that look like `kobo: https://...`, and appends them to `queue.txt`. Anything that can run a command can feed it (a chat bot, an SSH shortcut).
+The source inbox is input. `output_ingest_dirs` are destinations for the finished EPUB.
 
-## What you need
+## Source file formats
 
-- A server that runs scheduled jobs
-- Python 3.10 or newer
-- An LLM, or any tool, for the curation step
-- Optional: output ingest folders belonging to your reader/library applications
-- Optional: Audiobookshelf, Seerr/Overseerr, a media request log, TikTok collections, and Kickstarter IMAP access for interest signals
+- **`.txt`, `.urls`, `.list`** — one HTTP(S) article URL per line. Blank lines and lines beginning with `#` are ignored.
+- **`.json`** — an array of URLs/article objects, a single article object, or an object containing an `articles`, `items`, `urls`, `links`, or `data` array.
+- **`.jsonl`** — one URL string or article object per line.
 
-## Setup
+An article object can include `url` (or `link`), `title`, `published` (or `date`), `domain`, `image`, and pre-extracted `html` or plain-text `content`/`text`. If article content is supplied, the generator does not fetch that URL.
 
-1. **Install.**
-   ```sh
-   git clone https://github.com/joeShuff/kobo-morning-paper.git
-   cd kobo-morning-paper
-   python3 -m venv .venv
-   .venv/bin/pip install -r requirements.txt
-   ```
-   `opencv-python-headless` and `numpy` are only for the lead-image face filter. `yt-dlp` is only for TikTok collections.
+Example:
+```json
+{
+  "articles": [
+    {"url": "https://example.com/story", "title": "A story"},
+    {
+      "url": "https://example.com/another-story",
+      "title": "Another story",
+      "published": "2026-11-25",
+      "text": "The already extracted article text."
+    }
+  ]
+}
+```
 
-2. **Configure.** Copy `config.example.json` to `config.json`, then edit it:
-   - `data_dir`: where the pipeline keeps `queue.txt`, `articles/`, `interests.json`, logs and the generated EPUB.
-   - `paper_title`, `paper_tagline`: printed on the cover and front page.
-   - `output_ingest_dirs`: a list of absolute paths to output ingest folders. Each folder must already exist and be writable by the pipeline process. Use an empty list to keep the EPUB only in `data_dir`.
+**For producers:** write to a temporary filename and rename it into the inbox only when complete. The runner snapshots the inbox at startup. Unsupported or malformed files are left in place and reported; source files are archived only after the EPUB build and publishing succeed.
 
-   Example:
-   ```json
-   {
-     "data_dir": "/srv/morning-paper",
-     "paper_title": "The Morning Paper",
-     "output_ingest_dirs": [
-       "/srv/book-library/ingest",
-       "/srv/another-reader/import"
-     ]
-   }
-   ```
+## Configuration
 
-   The same dated filename is copied to each destination, for example `the-morning-paper-2026-11-24.epub`. The EPUB title and publication date metadata also include the edition date. Copies use a temporary file and atomic rename, so an ingest scanner cannot pick up a partially written EPUB. If any configured folder is missing or cannot be written, the run reports failure and retains `queue.txt` so publishing can be retried.
+Copy `config.example.json` to `config.json`. All settings have defaults; the only settings most deployments need to change are:
 
-   Scripts find the config through `KOBO_PAPER_CONFIG`, then `./config.json`, then the repo root. `config.json` is in `.gitignore`.
+- `data_dir`: persistent working directory for the article cache, logs and generated EPUB.
+- `source_ingest_dir`: inbox for source files. Defaults to `<data_dir>/source-ingest`.
+- `source_archive_dir`: dated archive for processed source files. Defaults to `<data_dir>/source-archive`.
+- `output_ingest_dirs`: optional list of existing, writable folders where the finished EPUB is copied.
+- `paper_title` and `paper_tagline`: newspaper branding.
+- `max_age_days`: exclude older cached/source articles from the edition. Set to a suitably high value if upstream producers already manage freshness.
 
-   For Kickstarter, set `KOBO_IMAP_USER` and `KOBO_IMAP_PASSWORD` in the environment. The password never goes in the config file.
+Example:
+```json
+{
+  "data_dir": "/srv/morning-paper",
+  "source_ingest_dir": "/srv/morning-paper/source-ingest",
+  "source_archive_dir": "/srv/morning-paper/source-archive",
+  "output_ingest_dirs": ["/srv/book-library/ingest"]
+}
+```
 
-3. **Sources and interests.** Configure only the sources you want in `config.json`. The article selection step is independent of the ingest destinations: your curation script reads `interests.json` and appends article URLs to `queue.txt`.
+Fonts and the optional lead-image face filter are presentation settings, not source integrations. Secrets and third-party service credentials are not needed.
 
-4. **Fonts (optional).** The cover uses UnifrakturMaguntia and PT Serif TTF files. Put them in `<data_dir>/fonts/` (names are set by `masthead_font`, `serif_bold_font`, and `serif_regular_font`). Without them the build still works and uses Pillow's built-in font.
+## Run locally
 
-5. **Run once by hand.**
-   ```sh
-   .venv/bin/python scripts/kobo-interests.py
-   cp curate.example.sh curate.sh
-   printf 'https://example.com/an-article\\n' >> /srv/morning-paper/queue.txt
-   .venv/bin/python scripts/kobo-digest-build.py
-   ```
-   The generated EPUB is at `<data_dir>/read-later.epub` and dated copies appear in each configured output ingest folder. For a self-contained test build from cached article JSON files, use:
-   ```sh
-   .venv/bin/python scripts/kobo-digest-build.py --dry-build /path/to/test-data
-   ```
+```sh
+git clone https://github.com/joeShuff/kobo-morning-paper.git
+cd kobo-morning-paper
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp config.example.json config.json
+.venv/bin/python scripts/kobo-ingest-build.py
+```
 
-6. **Schedule.** `crontab.example` has the 5:15 / 5:30 / 6:00 AM lines. Edit the paths and add them to your cron table.
+The generated EPUB is `<data_dir>/read-later.epub`. Add the 03:00 entry from `crontab.example` to run it daily. To build from cached fixture articles without network access, use:
 
-## Files
+```sh
+.venv/bin/python scripts/kobo-digest-build.py --dry-build /path/to/test-data
+```
 
-- `scripts/kobo-interests.py`: the interest model.
-- `scripts/kobo-queue.py`: URL intake helper.
-- `scripts/kobo-digest-build.py`: fetch, extract, build and publish the EPUB.
-- `scripts/kobo_config.py`: shared config loader and defaults.
-- `curate.example.sh`: the curation contract.
-- `tests/test_smoke.py`, `fixtures/`: smoke tests using local fixture articles.
+## Docker deployment
 
-## Test
+The image runs its own scheduler at 03:00 local container time. It catches up after downtime and retries failed builds every 15 minutes.
+
+```sh
+git clone https://github.com/joeShuff/kobo-morning-paper.git newspaper
+cd newspaper
+mkdir -p data
+cp config.docker.example.json config.json
+docker compose up -d --build
+docker compose logs -f newspaper
+```
+
+Drop source files into `./data/source-ingest` on the host. Working data, article cache, generated EPUB and dated archives persist under `./data`.
+
+A producer container can mount the same inbox:
+```yaml
+volumes:
+  - /path/to/newspaper/data/source-ingest:/newspaper-ingest
+```
+
+If another application should receive the EPUB, mount its ingest folder into this container and set the container-side path in `output_ingest_dirs`. The Compose file uses `TZ=Europe/London` by default; change it to adjust the schedule timezone.
+
+To trigger a build manually:
+```sh
+docker compose run --rm newspaper python scripts/kobo-ingest-build.py
+```
+
+## Tests
 
 ```sh
 .venv/bin/python -m pytest
 ```
 
-The smoke tests build an EPUB from fixture articles and verify publishing to multiple ingest folders.
+## Main components
 
-## Open-source parts
-
-trafilatura, ebooklib, Pillow, yt-dlp.
+- `scripts/kobo-ingest-build.py`: daily source intake, build orchestration and archiving.
+- `scripts/kobo_ingest.py`: source file parsing and staging helpers.
+- `scripts/kobo-digest-build.py`: fetch, extract, render, and publish the EPUB.
+- `scripts/kobo_config.py`: small configuration loader.
 
 ## License
 

@@ -1,14 +1,8 @@
-# Edit the paths, then add these lines to your cron table with `crontab -e`.
+# Edit the paths, then add this line to your cron table with `crontab -e`.
 PATH=/usr/local/bin:/usr/bin:/bin
 REPO=/path/to/kobo-morning-paper
 PY=/path/to/kobo-morning-paper/.venv/bin/python
 KOBO_PAPER_CONFIG=/path/to/kobo-morning-paper/config.json
 
-# 5:15 AM  interest model -> interests.json
-15 5 * * * $PY $REPO/scripts/kobo-interests.py >> $HOME/kobo-articles/interests.log 2>&1
-
-# 5:30 AM  curation (your LLM step): reads interests.json, appends ~10 URLs to queue.txt
-30 5 * * * $REPO/curate.sh >> $HOME/kobo-articles/curate.log 2>&1
-
-# 6:00 AM  fetch, extract, build and publish the dated EPUB
-0 6 * * * $PY $REPO/scripts/kobo-digest-build.py >> $HOME/kobo-articles/cron.log 2>&1
+# 3:00 AM: read prepared source files, build and publish the newspaper, then archive inputs.
+0 3 * * * $PY $REPO/scripts/kobo-ingest-build.py >> $HOME/kobo-articles/cron.log 2>&1

@@ -1,0 +1,17 @@
+services:
+  newspaper:
+    build: .
+    container_name: kobo-morning-paper
+    restart: unless-stopped
+    environment:
+      TZ: Europe/London
+      # Keep this aligned with the timezone used for the 03:00 schedule.
+      KOBO_PAPER_CONFIG: /config/config.json
+    volumes:
+      # Persistent queue, article cache, generated EPUB, source inbox and archive.
+      - ./data:/data
+      # Keep secrets and host-specific paths out of the image.
+      - ./config.json:/config/config.json:ro
+      # Optional: mount a destination folder and add its container path to
+      # output_ingest_dirs in config.json.
+      # - /path/to/bookorbit/ingest:/output/bookorbit
