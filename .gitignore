@@ -1,6 +1,5 @@
 config.json
 .env
-curate.sh
 .venv/
 __pycache__/
 *.pyc
