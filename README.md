@@ -107,6 +107,50 @@ Example JSON:
 - `scripts/kobo_config.py`: shared config loader and defaults.
 - `tests/`, `fixtures/`: smoke tests using local fixture articles.
 
+## Docker deployment (recommended)
+
+The image runs the daily scheduler itself, so you do not need host cron or a second scheduler container. It checks the configured local time and starts the ingest/build workflow at 03:00. If the container is stopped at 03:00, it catches up when it next starts. Failed builds are retried every 15 minutes.
+
+1. Create a deployment directory and copy the Docker examples:
+   ```sh
+   mkdir -p newspaper/data
+   cd newspaper
+   # Put Dockerfile, compose.yaml and the project files here (or clone this repo).
+   cp config.example.json config.json
+   ```
+
+2. In `config.json`, set `data_dir` to `/data`. Leave `source_ingest_dir` and `source_archive_dir` empty to use `/data/source-ingest` and `/data/source-archive`. Configure `output_ingest_dirs` with paths inside the container, not host paths.
+
+3. Start it:
+   ```sh
+   docker compose up -d --build
+   docker compose logs -f newspaper
+   ```
+
+4. Drop source files into `./data/source-ingest` on the Docker host. The dated archive will appear under `./data/source-archive`; the generated EPUB and article cache remain under `./data`.
+
+5. To trigger a build manually:
+   ```sh
+   docker compose run --rm newspaper python scripts/kobo-scheduler.py --run-now
+   ```
+
+### Docker volumes and other containers
+
+The `./data:/data` bind mount keeps all working state outside the container. A producer container can mount the same host inbox directory, for example:
+
+```yaml
+volumes:
+  - /path/to/newspaper/data/source-ingest:/newspaper-ingest
+```
+
+It can then write supported `.txt`, `.json`, or `.jsonl` files into `/newspaper-ingest`. Producers should write to a temporary filename and rename into place when complete.
+
+If the finished EPUB should be imported by another container, mount that application's ingest directory into the newspaper container and use its *container-side* mount path in `output_ingest_dirs`. For example, mount the host folder at `/output/bookorbit` and configure `["/output/bookorbit"]`.
+
+The container uses `TZ=Europe/London` by default. Change both the Compose `TZ` value and the config's `TZ` environment if you want a different schedule timezone. The image includes the timezone database and runs as a long-lived scheduler; no privileged mode or Docker socket access is required.
+
+The image currently installs the full `requirements.txt`, including optional OpenCV and yt-dlp dependencies, so all existing generator and interest-model features remain available.
+
 ## Test
 
 ```sh
