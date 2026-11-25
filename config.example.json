@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to config.json and edit. Every key is optional; see scripts/kobo_config.py for defaults.",
+  "_comment": "Copy to config.json. Source producers write to source_ingest_dir; this app only builds and publishes the newspaper.",
   "data_dir": "~/kobo-articles",
   "paper_title": "The Morning Paper",
   "paper_tagline": "All the Reads Worth Your Time",
@@ -7,17 +7,9 @@
   "source_ingest_dir": "",
   "source_archive_dir": "",
   "output_ingest_dirs": [],
-
-  "audiobookshelf_container": "",
-  "media_watch_file": "",
-  "media_requester": "me",
-  "seerr_url": "",
-  "seerr_settings": "",
-  "seerr_user": "",
-  "tiktok_collections": ["https://www.tiktok.com/@your-handle/collection/Name-0000000000000000000"],
-  "genres": ["fiction", "fantasy"],
-  "exclude_titles": [],
-  "exclude_requesters": [],
-  "kickstarter_enabled": false,
+  "fonts_dir": "fonts",
+  "masthead_font": "UnifrakturMaguntia-Book.ttf",
+  "serif_bold_font": "PT_Serif-Web-Bold.ttf",
+  "serif_regular_font": "PT_Serif-Web-Regular.ttf",
   "lead_image_avoid_faces": true
 }
