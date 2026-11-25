@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     KOBO_PAPER_CONFIG=/config/config.json
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tzdata libglib2.0-0 libgl1 \
+    && apt-get install -y --no-install-recommends tzdata libglib2.0-0 libgl1 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
