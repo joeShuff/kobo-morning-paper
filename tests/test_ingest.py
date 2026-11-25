@@ -44,6 +44,26 @@ def test_parse_jsonl_pre_extracted_article(tmp_path):
     assert articles[0]["html"] == "<p>Body</p>"
 
 
+def test_collect_sources_appends_urls_and_caches_pre_extracted_articles(tmp_path, monkeypatch):
+    source = tmp_path / "feed.json"
+    source.write_text(json.dumps({"articles": [
+        {"url": "https://example.com/story", "title": "Story", "text": "Body"},
+        "https://example.org/link"
+    ]}))
+    queue = tmp_path / "queue.txt"
+    queue.write_text("# existing queue\nhttps://example.org/link")
+    articles_dir = tmp_path / "articles"
+    monkeypatch.setattr(ingest, "QUEUE", queue)
+    monkeypatch.setattr(ingest, "ARTICLES", articles_dir)
+
+    added, cached = ingest.collect_sources([source])
+    assert (added, cached) == (1, 1)
+    assert queue.read_text().endswith("https://example.org/link\nhttps://example.com/story\n")
+    stored = list(articles_dir.glob("*.json"))
+    assert len(stored) == 1
+    assert json.loads(stored[0].read_text())["title"] == "Story"
+
+
 def test_unsupported_and_invalid_source_files_are_rejected(tmp_path):
     unsupported = tmp_path / "feed.csv"
     unsupported.write_text("url\n")
