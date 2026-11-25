@@ -1,9 +1,11 @@
 """Tests for the daily source-file ingest helpers."""
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
 SPEC = importlib.util.spec_from_file_location("kobo_ingest", ROOT / "scripts" / "kobo_ingest.py")
 ingest = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ingest)
