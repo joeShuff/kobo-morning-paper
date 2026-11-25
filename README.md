@@ -116,7 +116,7 @@ The image runs the daily scheduler itself, so you do not need host cron or a sec
    git clone https://github.com/joeShuff/kobo-morning-paper.git newspaper
    cd newspaper
    mkdir -p data
-   cp config.example.json config.json
+   cp config.docker.example.json config.json
    ```
 
 2. In `config.json`, set `data_dir` to `/data`. Leave `source_ingest_dir` and `source_archive_dir` empty to use `/data/source-ingest` and `/data/source-archive`. Configure `output_ingest_dirs` with paths inside the container, not host paths.
@@ -149,7 +149,7 @@ If the finished EPUB should be imported by another container, mount that applica
 
 The container uses `TZ=Europe/London` by default. Change the Compose `TZ` value if you want a different schedule timezone. The image includes the timezone database and runs as a long-lived scheduler; no privileged mode or Docker socket access is required.
 
-The image currently installs the full `requirements.txt`, including optional OpenCV and yt-dlp dependencies, so all existing generator and interest-model features remain available.
+The scheduler records its last successful edition date under `data_dir`, so restarting the container does not rebuild the same day's edition. The image currently installs the full `requirements.txt`, including optional OpenCV and yt-dlp dependencies, so all existing generator and interest-model features remain available.
 
 ## Test
 
