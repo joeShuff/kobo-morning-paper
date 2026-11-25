@@ -44,7 +44,7 @@ def _article_record(item):
     if body is None:
         return url, None
     if "html" not in item:
-        body = "<p>" + html.escape(str(body)).replace("\\n", "</p><p>") + "</p>"
+        body = "<p>" + html.escape(str(body)).replace("\n", "</p><p>") + "</p>"
     domain = item.get("domain") or urlparse(url).netloc.replace("www.", "")
     record = {
         "url": url,
@@ -111,14 +111,15 @@ def collect_sources(files):
         records.extend(file_records)
 
     # Append URLs without clobbering anything already queued by another source.
-    existing = QUEUE.read_text(encoding="utf-8").splitlines() if QUEUE.exists() else []
-    seen = {line.strip() for line in existing if line.strip() and not line.lstrip().startswith("#")}
+    existing_text = QUEUE.read_text(encoding="utf-8") if QUEUE.exists() else ""
+    seen = {line.strip() for line in existing_text.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")}
     new_urls = [url for url in dict.fromkeys(urls) if url not in seen]
     if new_urls:
         with QUEUE.open("a", encoding="utf-8") as queue:
-            if existing and not existing[-1].endswith("\\n"):
-                queue.write("\\n")
-            queue.write("".join(url + "\\n" for url in new_urls))
+            if existing_text and not existing_text.endswith("\n"):
+                queue.write("\n")
+            queue.write("".join(url + "\n" for url in new_urls))
 
     ARTICLES.mkdir(parents=True, exist_ok=True)
     cached = 0
