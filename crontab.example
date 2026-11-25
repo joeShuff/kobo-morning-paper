@@ -2,9 +2,9 @@
 PATH=/usr/local/bin:/usr/bin:/bin
 REPO=/path/to/kobo-morning-paper
 PY=/path/to/kobo-morning-paper/.venv/bin/python
-KOBO_DATA_DIR=$HOME/kobo-articles
-KOBO_SOURCE_INGEST_DIR=$KOBO_DATA_DIR/source-ingest
-KOBO_SOURCE_ARCHIVE_DIR=$KOBO_DATA_DIR/source-archive
+KOBO_DATA_DIR=/home/your-user/kobo-articles
+KOBO_SOURCE_INGEST_DIR=/home/your-user/kobo-articles/source-ingest
+KOBO_SOURCE_ARCHIVE_DIR=/home/your-user/kobo-articles/source-archive
 # Set KOBO_* environment variables here as needed. KOBO_SCHEDULE_TIME is only
 # used by the built-in Docker scheduler; cron uses the time in the cron entry.
 
