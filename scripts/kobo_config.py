@@ -18,6 +18,9 @@ DEFAULTS = {
     "paper_title": "The Morning Paper",
     "paper_tagline": "All the Reads Worth Your Time",
     "max_age_days": 7,                    # drop articles older than this (pinned.txt bypasses)
+    # Daily source-file intake and date-based archive. Empty means use data_dir defaults.
+    "source_ingest_dir": "",
+    "source_archive_dir": "",
     # Fonts for the generated cover and front page (TTF files). See README, "Fonts".
     "fonts_dir": "fonts",                 # relative to data_dir unless absolute
     "masthead_font": "UnifrakturMaguntia-Book.ttf",
@@ -26,21 +29,21 @@ DEFAULTS = {
     # Optional destinations scanned by external library/import services.
     "output_ingest_dirs": [],
     # Interest model sources.
-    "audiobookshelf_container": "",       # docker container name; empty = skip Audiobookshelf
+    "audiobookshelf_container": "",
     "audiobookshelf_db": "/config/absdatabase.sqlite",
-    "media_watch_file": "",               # optional JSONL of media requests; empty = skip
-    "media_requester": "me",              # value of requested_by that counts as yours
-    "seerr_url": "",                      # e.g. http://localhost:5055 ; empty = skip Seerr
-    "seerr_settings": "",                 # path to Seerr settings.json (holds the API key)
+    "media_watch_file": "",
+    "media_requester": "me",
+    "seerr_url": "",
+    "seerr_settings": "",
     "seerr_user": "",
-    "ytdlp": "yt-dlp",                    # path or name of the yt-dlp binary
-    "tiktok_collections": [],             # public TikTok collection URLs
+    "ytdlp": "yt-dlp",
+    "tiktok_collections": [],
     "exclude_titles": [],
     "exclude_requesters": [],
     "genres": ["fiction", "fantasy"],
-    "extra_rules": [],                    # extra plain-English rules appended to interests.json
-    "lead_image_avoid_faces": True,       # skip photos with a prominent face for lead images
-    "kickstarter_enabled": False,         # needs KOBO_IMAP_USER / KOBO_IMAP_PASSWORD
+    "extra_rules": [],
+    "lead_image_avoid_faces": True,
+    "kickstarter_enabled": False,
     "imap_host": "imap.gmail.com",
     "imap_folder": "[Gmail]/All Mail",
 }
