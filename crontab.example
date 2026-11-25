@@ -2,7 +2,11 @@
 PATH=/usr/local/bin:/usr/bin:/bin
 REPO=/path/to/kobo-morning-paper
 PY=/path/to/kobo-morning-paper/.venv/bin/python
-KOBO_PAPER_CONFIG=/path/to/kobo-morning-paper/config.json
+KOBO_DATA_DIR=$HOME/kobo-articles
+KOBO_SOURCE_INGEST_DIR=$KOBO_DATA_DIR/source-ingest
+KOBO_SOURCE_ARCHIVE_DIR=$KOBO_DATA_DIR/source-archive
+# Set KOBO_* environment variables here as needed. KOBO_SCHEDULE_TIME is only
+# used by the built-in Docker scheduler; cron uses the time in the cron entry.
 
 # 3:00 AM: read prepared source files, build and publish the newspaper, then archive inputs.
 0 3 * * * $PY $REPO/scripts/kobo-ingest-build.py >> $HOME/kobo-articles/cron.log 2>&1
