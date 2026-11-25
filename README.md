@@ -80,9 +80,13 @@ Example JSON:
 
    Scripts find the config through `KOBO_PAPER_CONFIG`, then `./config.json`, then the repo root. `config.json` is in `.gitignore`.
 
+   For Kickstarter, set `KOBO_IMAP_USER` and `KOBO_IMAP_PASSWORD` in the environment. The password never goes in the config file.
+
 3. **Add source producers.** Configure your other services to write one of the supported formats into `source_ingest_dir`. They do not need to call this project or know about the newspaper build process.
 
-4. **Run once by hand.**
+4. **Fonts (optional).** The cover uses UnifrakturMaguntia and PT Serif TTF files. Put them in `<data_dir>/fonts/` (names are set by `masthead_font`, `serif_bold_font`, and `serif_regular_font`). Without them the build still works and uses Pillow's built-in font.
+
+5. **Run once by hand.**
    ```sh
    .venv/bin/python scripts/kobo-ingest-build.py
    ```
@@ -91,7 +95,7 @@ Example JSON:
    .venv/bin/python scripts/kobo-digest-build.py --dry-build /path/to/test-data
    ```
 
-5. **Schedule.** Add the 3:00 AM line from `crontab.example` to your cron table. The example also retains the optional interest-model job; it is independent of the source-file ingest workflow.
+6. **Schedule.** Add the 3:00 AM line from `crontab.example` to your cron table. The example also retains the optional interest-model job; it is independent of the source-file ingest workflow.
 
 ## Files
 
