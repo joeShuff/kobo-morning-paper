@@ -4,6 +4,8 @@
   "paper_title": "The Morning Paper",
   "paper_tagline": "All the Reads Worth Your Time",
   "max_age_days": 7,
+  "source_ingest_dir": "",
+  "source_archive_dir": "",
   "output_ingest_dirs": [],
 
   "audiobookshelf_container": "",
