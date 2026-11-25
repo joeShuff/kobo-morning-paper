@@ -113,9 +113,9 @@ The image runs the daily scheduler itself, so you do not need host cron or a sec
 
 1. Create a deployment directory and copy the Docker examples:
    ```sh
-   mkdir -p newspaper/data
+   git clone https://github.com/joeShuff/kobo-morning-paper.git newspaper
    cd newspaper
-   # Put Dockerfile, compose.yaml and the project files here (or clone this repo).
+   mkdir -p data
    cp config.example.json config.json
    ```
 
@@ -147,7 +147,7 @@ It can then write supported `.txt`, `.json`, or `.jsonl` files into `/newspaper-
 
 If the finished EPUB should be imported by another container, mount that application's ingest directory into the newspaper container and use its *container-side* mount path in `output_ingest_dirs`. For example, mount the host folder at `/output/bookorbit` and configure `["/output/bookorbit"]`.
 
-The container uses `TZ=Europe/London` by default. Change both the Compose `TZ` value and the config's `TZ` environment if you want a different schedule timezone. The image includes the timezone database and runs as a long-lived scheduler; no privileged mode or Docker socket access is required.
+The container uses `TZ=Europe/London` by default. Change the Compose `TZ` value if you want a different schedule timezone. The image includes the timezone database and runs as a long-lived scheduler; no privileged mode or Docker socket access is required.
 
 The image currently installs the full `requirements.txt`, including optional OpenCV and yt-dlp dependencies, so all existing generator and interest-model features remain available.
 
