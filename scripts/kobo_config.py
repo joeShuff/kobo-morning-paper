@@ -17,21 +17,14 @@ DEFAULTS = {
     # The paper itself.
     "paper_title": "The Morning Paper",
     "paper_tagline": "All the Reads Worth Your Time",
-    "book_title": "Read Later",          # the single Calibre book that is refreshed daily
-    "book_author": "Articles",
     "max_age_days": 7,                    # drop articles older than this (pinned.txt bypasses)
     # Fonts for the generated cover and front page (TTF files). See README, "Fonts".
     "fonts_dir": "fonts",                 # relative to data_dir unless absolute
     "masthead_font": "UnifrakturMaguntia-Book.ttf",
     "serif_bold_font": "PT_Serif-Web-Bold.ttf",
     "serif_regular_font": "PT_Serif-Web-Regular.ttf",
-    # Calibre / Calibre-Web (all optional: without them the build stops after writing the EPUB).
-    "calibre_enabled": True,
-    "calibre_library": "/path/to/calibre/library",   # folder that holds metadata.db
-    "calibre_docker_image": "lscr.io/linuxserver/calibre:latest",
-    "calibre_web_container": "calibre-web",
-    "calibre_web_app_db": "/path/to/calibre-web/config/app.db",
-    "kobo_user_id": 1,                    # Calibre-Web user id that owns the Kobo
+    # Optional destinations scanned by external library/import services.
+    "output_ingest_dirs": [],
     # Interest model sources.
     "audiobookshelf_container": "",       # docker container name; empty = skip Audiobookshelf
     "audiobookshelf_db": "/config/absdatabase.sqlite",
@@ -47,7 +40,6 @@ DEFAULTS = {
     "genres": ["fiction", "fantasy"],
     "extra_rules": [],                    # extra plain-English rules appended to interests.json
     "lead_image_avoid_faces": True,       # skip photos with a prominent face for lead images
-    "library_owner": "1000:1000",         # uid:gid that owns your Calibre library
     "kickstarter_enabled": False,         # needs KOBO_IMAP_USER / KOBO_IMAP_PASSWORD
     "imap_host": "imap.gmail.com",
     "imap_folder": "[Gmail]/All Mail",

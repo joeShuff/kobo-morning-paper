@@ -10,5 +10,5 @@ KOBO_PAPER_CONFIG=/path/to/kobo-morning-paper/config.json
 # 5:30 AM  curation (your LLM step): reads interests.json, appends ~10 URLs to queue.txt
 30 5 * * * $REPO/curate.sh >> $HOME/kobo-articles/curate.log 2>&1
 
-# 6:00 AM  fetch, extract, build the EPUB, update Calibre
+# 6:00 AM  fetch, extract, build and publish the dated EPUB
 0 6 * * * $PY $REPO/scripts/kobo-digest-build.py >> $HOME/kobo-articles/cron.log 2>&1

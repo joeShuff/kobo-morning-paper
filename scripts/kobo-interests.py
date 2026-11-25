@@ -5,7 +5,7 @@ Read-only on every source. Writes one file, atomically, into data_dir (see confi
 The curation step (an LLM, see README) reads it and picks about 10 articles into queue.txt.
 
 Inputs and base weights:
-  books_reading  35%  Kobo sync progress > 0 in the last 30 days + Audiobookshelf progress
+  books_reading  35%  Audiobookshelf progress in the last 30 days
   own_titles     30%  media requests you made (JSONL log and/or Seerr)
   genre_core     20%  your standing genres, plus SPECIFIC screen entries only
   tiktok         10%  public collections listed with yt-dlp (config list)
@@ -19,7 +19,6 @@ import imaplib
 import json
 import os
 import re
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -34,8 +33,6 @@ from kobo_config import CFG, DATA_DIR
 
 OUT = DATA_DIR / "interests.json"
 MEDIA_WATCH = Path(CFG["media_watch_file"]).expanduser() if CFG["media_watch_file"] else None
-CALIBRE_APP_DB = CFG["calibre_web_app_db"]
-CALIBRE_META_DB = str(Path(CFG["calibre_library"]) / "metadata.db")
 SEERR_SETTINGS = CFG["seerr_settings"]
 YTDLP = CFG["ytdlp"]
 
@@ -79,10 +76,6 @@ def write_atomic(path, data):
     os.replace(tmp, path)
 
 
-def ro_connect(path):
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-
-
 def clean_title(t):
     t = re.sub(r"\s*\((?:19|20)\d\d\)\s*$", "", t.strip())
     t = re.sub(r"\s*\((?:Tunarr|seasons?|S\d)[^)]*\)\s*$", "", t, flags=re.I)
@@ -90,34 +83,6 @@ def clean_title(t):
 
 
 # --- books_reading ----------------------------------------------------------------
-
-def kobo_reading(cfg, now=None):
-    if not Path(CALIBRE_APP_DB).exists():
-        raise RuntimeError("calibre_web_app_db not found; set it in config.json")
-    now = now or datetime.now(timezone.utc)
-    cutoff = (now - timedelta(days=READING_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
-    app, meta = ro_connect(CALIBRE_APP_DB), ro_connect(CALIBRE_META_DB)
-    rows = app.execute(
-        """SELECT s.book_id, s.last_modified,
-                  COALESCE(b.progress_percent,0)
-           FROM kobo_reading_state s JOIN kobo_bookmark b ON b.kobo_reading_state_id = s.id
-           WHERE s.user_id = ? AND s.last_modified >= ?""",
-        (cfg["kobo_user_id"], cutoff)).fetchall()
-    out = []
-    for book_id, synced, progress in rows:
-        if not progress or progress <= 0:
-            continue
-        r = meta.execute("SELECT title, author_sort FROM books WHERE id=?", (book_id,)).fetchone()
-        if not r or r[0] == "Read Later":
-            continue  # the paper itself is not a book you read
-        authors = [a[0] for a in meta.execute(
-            "SELECT a.name FROM authors a JOIN books_authors_link l ON l.author=a.id WHERE l.book=?",
-            (book_id,))]
-        out.append({"kind": "book", "name": r[0], "creator": ", ".join(authors),
-                    "date": synced[:10], "progress_pct": round(progress, 1),
-                    "why": f"Kobo sync, {round(progress)}% read, last synced {synced[:10]}"})
-    return out
-
 
 def abs_reading(now=None):
     if not CFG["audiobookshelf_container"]:
@@ -132,34 +97,14 @@ def abs_reading(now=None):
     if p.returncode != 0:
         raise RuntimeError("audiobookshelf read failed: " + p.stderr.strip()[:200])
     cutoff = (now - timedelta(days=READING_DAYS)).date().isoformat()
-    meta = ro_connect(CALIBRE_META_DB)
     out = []
     for r in json.loads(p.stdout):
         if r["f"] or r["u"][:10] < cutoff:
             continue
-        authors = ""
-        m = meta.execute("SELECT id FROM books WHERE title=?", (r["n"],)).fetchone()
-        if m:
-            authors = ", ".join(a[0] for a in meta.execute(
-                "SELECT a.name FROM authors a JOIN books_authors_link l ON l.author=a.id WHERE l.book=?",
-                (m[0],)))
         pct = round(100 * r["t"] / r["d"], 1) if r["d"] else None
-        out.append({"kind": "book", "name": r["n"], "creator": authors, "date": r["u"][:10],
+        out.append({"kind": "book", "name": r["n"], "date": r["u"][:10],
                     "progress_pct": pct, "why": f"Audiobookshelf progress {pct}%, last played {r['u'][:10]}"})
     return out
-
-
-def merge_books(*lists):
-    seen = {}
-    for lst in lists:
-        for e in lst:
-            key = e["name"].lower()
-            if key in seen:
-                seen[key]["why"] += "; " + e["why"].split(",")[0]
-                seen[key]["date"] = max(seen[key]["date"], e["date"])
-            else:
-                seen[key] = dict(e)
-    return sorted(seen.values(), key=lambda e: e["date"], reverse=True)
 
 
 # --- own_titles ---------------------------------------------------------------------
@@ -355,9 +300,7 @@ def build(cfg, src):
             status[name] = {"status": "failed", "reason": str(e)[:300]}
             return default
 
-    kobo = run("kobo_sync", src["kobo"], [])
-    abook = run("audiobookshelf", src["abs"], [])
-    books = merge_books(kobo, abook)
+    books = run("audiobookshelf", src["abs"], [])
     mw = run("media_watch", src["media_watch"], [])
     seerr_res = run("seerr", src["seerr"], ([], []))
     own = dedupe(mw + seerr_res[0])
@@ -367,19 +310,12 @@ def build(cfg, src):
     ks = run("kickstarter", src["kickstarter"], [])
 
     input_status = {
-        "books_reading": status["kobo_sync"] if status["kobo_sync"]["status"] == "failed" or
-        status["audiobookshelf"]["status"] == "ok" else status["audiobookshelf"],
+        "books_reading": status["audiobookshelf"],
         "own_titles": status["media_watch"] if status["media_watch"]["status"] == "failed" else status["seerr"],
         "genre_core": {"status": "ok"},
         "tiktok": status["tiktok"],
         "kickstarter": status["kickstarter"],
     }
-    # a books/own source pair reports failed only when every part failed
-    if status["kobo_sync"]["status"] == "failed" and status["audiobookshelf"]["status"] == "failed":
-        input_status["books_reading"] = status["kobo_sync"]
-    elif "failed" in (status["kobo_sync"]["status"], status["audiobookshelf"]["status"]):
-        input_status["books_reading"] = {"status": "partial", "parts": {
-            "kobo_sync": status["kobo_sync"], "audiobookshelf": status["audiobookshelf"]}}
     if status["media_watch"]["status"] == "failed" and status["seerr"]["status"] == "failed":
         input_status["own_titles"] = status["media_watch"]
     elif "failed" in (status["media_watch"]["status"], status["seerr"]["status"]):
@@ -417,7 +353,6 @@ def build(cfg, src):
 def main():
     cfg = load_config()
     src = {
-        "kobo": lambda: kobo_reading(cfg),
         "abs": abs_reading,
         "media_watch": lambda: media_watch_titles(cfg),
         "seerr": lambda: seerr_titles(cfg),
