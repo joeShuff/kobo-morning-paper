@@ -203,16 +203,16 @@ def _fetch_article_text(url):
     published = getattr(metadata, "date", None) if metadata else None
     heading = f"ARTICLE URL: {url}"
     if title:
-        heading += f"\\nARTICLE TITLE: {title}"
+        heading += f"\nARTICLE TITLE: {title}"
     if published:
-        heading += f"\\nSOURCE PUBLISHED DATE: {published}"
-    return heading + "\\nEXTRACTED ARTICLE TEXT:\\n" + text
+        heading += f"\nSOURCE PUBLISHED DATE: {published}"
+    return heading + "\nEXTRACTED ARTICLE TEXT:\n" + text
 
 
 def _expand_urls(content, cache):
     """Replace URLs in source text with extracted article text; fetch each URL once."""
     urls = []
-    for match in re.findall(r"https?://[^\\s<>\\\"']+", content):
+    for match in re.findall(r"https?://[^\s<>\"']+", content):
         url = match.rstrip(").,;]")
         if url and url not in urls:
             urls.append(url)
