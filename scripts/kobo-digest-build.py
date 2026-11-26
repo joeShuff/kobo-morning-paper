@@ -685,9 +685,18 @@ def build_epub(articles: list[dict]) -> None:
                                       a["url"], a["domain"])
         disp_title = f"{a['title']} ({full_min} min)"
         ch = epub.EpubHtml(title=disp_title, file_name=f"art_{i}.xhtml", lang="en")
-        head = (f"<h1>{a['title']}</h1>"
-                f"<p style='color:#666'>{a['domain']} &middot; {a.get('published','')}"
-                f" &middot; {full_min} min &middot; <a href='{a['url']}'>source</a></p><hr/>")
+        import html as _html
+        section = _html.escape(str(a.get("section") or ""))
+        dek = _html.escape(str(a.get("dek") or ""))
+        safe_title = _html.escape(str(a["title"]))
+        safe_domain = _html.escape(str(a.get("domain", "")))
+        source_link = (f" &middot; <a href='{_html.escape(a['url'], quote=True)}'>source</a>"
+                       if a.get("url", "").startswith(("http://", "https://")) else "")
+        head = (f"<p style='color:#666'>{section}</p>" if section else "")
+        head += (f"<h1>{safe_title}</h1>"
+                 + (f"<p><em>{dek}</em></p>" if dek else "")
+                 + f"<p style='color:#666'>{safe_domain} &middot; {a.get('published','')}"
+                 + f" &middot; {full_min} min{source_link}</p><hr/>")
         # "More in this edition" footer: real cross-navigation between articles AND it
         # pads every chapter past ~5000 characters. The Kobo shows a footnote-style
         # POPUP (instead of navigating) for in-book links whose target is under 5000
@@ -798,6 +807,8 @@ def main(argv=None) -> int:
     added, failed = store_new(urls)
     if failed:
         log("failed URLs: " + ", ".join(f"{reason}: {url}" for url, reason in failed))
+        # Keep the queue and source inbox intact so failed fetches can be retried.
+        return 1
     articles = load_all_articles()
     if not articles:
         log("no articles could be extracted; not publishing")
