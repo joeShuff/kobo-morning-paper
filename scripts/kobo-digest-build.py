@@ -815,6 +815,8 @@ def main(argv=None) -> int:
         EDITION_CONTENT = json.loads((BASE / "edition-content.json").read_text(encoding="utf-8"))
         if not isinstance(EDITION_CONTENT, dict):
             EDITION_CONTENT = {}
+        if EDITION_CONTENT.get("date") != edition_date().isoformat():
+            EDITION_CONTENT = {}
     except (OSError, ValueError):
         EDITION_CONTENT = {}
     urls = [] if dry else read_queue()
