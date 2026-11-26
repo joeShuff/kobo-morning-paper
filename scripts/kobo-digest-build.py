@@ -33,6 +33,7 @@ LOG = BASE / "build.log"
 
 PAPER_TITLE = CFG["paper_title"]
 PAPER_TAGLINE = CFG["paper_tagline"]
+EDITION_CONTENT = {}
 OUTPUT_INGEST_DIRS = CFG.get("output_ingest_dirs", [])
 
 
@@ -421,9 +422,15 @@ def generate_cover(articles: list[dict]) -> "Path | None":
         d.line([(M, y + 7), (W - M, y + 7)], fill=black, width=1)
         y += 22
         tag = _font(SERIF_R, 26)
-        tagt = PAPER_TAGLINE
+        tagt = EDITION_CONTENT.get("subheading") or PAPER_TAGLINE
         d.text(((W - d.textlength(tagt, font=tag)) / 2, y), tagt, font=tag, fill=gray)
         y += 46
+        if EDITION_CONTENT.get("headline"):
+            edition_font = _font(SERIF_B, 30)
+            for line in _wrap(d, EDITION_CONTENT["headline"], edition_font, W - 2 * M)[:2]:
+                d.text(((W - d.textlength(line, font=edition_font)) / 2, y), line, font=edition_font, fill=black)
+                y += edition_font.getbbox("Tg")[3] + 4
+            y += 8
         d.line([(M, y), (W - M, y)], fill=black, width=1)
         y += 9
         small = _font(SERIF_R, 20)
@@ -578,7 +585,11 @@ def build_front_page(book, articles: list[dict]):
     y += mast.getbbox("Tg")[3] + 24
     d.line([(M, y), (W - M, y)], fill=BLACK, width=4); d.line([(M, y + 9), (W - M, y + 9)], fill=BLACK, width=1); y += 28
     tag = _font(SERIF_R, 30)
-    d.text(((W - d.textlength(PAPER_TAGLINE, font=tag)) / 2, y), PAPER_TAGLINE, font=tag, fill=GRAY); y += 50
+    tagline = EDITION_CONTENT.get("subheading") or PAPER_TAGLINE
+    d.text(((W - d.textlength(tagline, font=tag)) / 2, y), tagline, font=tag, fill=GRAY); y += 50
+    if EDITION_CONTENT.get("headline"):
+        edition_font = _font(SERIF_B, 34)
+        y = wrap_draw(d, EDITION_CONTENT["headline"], edition_font, M, y, CW, BLACK, 4, 2) + 8
     d.line([(M, y), (W - M, y)], fill=BLACK, width=1); y += 12
     small = _font(SERIF_R, 23)
     d.text((M, y), f"VOL. I   No. {edition}", font=small, fill=BLACK)
@@ -783,7 +794,7 @@ def publish_to_output_ingest_dirs() -> bool:
 
 def main(argv=None) -> int:
     global BASE, QUEUE, ARTICLES, EPUB_OUT, LOG, FONTS, MAST_FONT, SERIF_B, SERIF_R
-    global COVER_OUT, EDITION_FILE
+    global COVER_OUT, EDITION_FILE, EDITION_CONTENT
     argv = sys.argv[1:] if argv is None else argv
     dry = None
     if "--dry-build" in argv:
@@ -800,6 +811,12 @@ def main(argv=None) -> int:
         SERIF_R = str(FONTS / CFG["serif_regular_font"])
         COVER_OUT, EDITION_FILE = BASE / "cover.jpg", BASE / "edition.txt"
     BASE.mkdir(parents=True, exist_ok=True)
+    try:
+        EDITION_CONTENT = json.loads((BASE / "edition-content.json").read_text(encoding="utf-8"))
+        if not isinstance(EDITION_CONTENT, dict):
+            EDITION_CONTENT = {}
+    except (OSError, ValueError):
+        EDITION_CONTENT = {}
     urls = [] if dry else read_queue()
     if not urls and not any(ARTICLES.glob("*.json")):
         log("nothing queued and no stored articles; nothing to build")
