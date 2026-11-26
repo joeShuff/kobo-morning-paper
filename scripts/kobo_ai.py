@@ -49,6 +49,16 @@ class AIError(RuntimeError):
     """A configuration, provider or response error from the AI editor."""
 
 
+def _edition_date():
+    override = _setting("KOBO_DATELINE_DATE")
+    if override:
+        try:
+            return date.fromisoformat(override)
+        except ValueError as exc:
+            raise AIError("KOBO_DATELINE_DATE must use YYYY-MM-DD format") from exc
+    return date.today()
+
+
 def _setting(name, default=""):
     value = os.getenv(name)
     return default if value is None else value.strip()
@@ -178,7 +188,7 @@ def _source_bundle(source_paths):
 
 
 def build_user_prompt(source_paths, today=None):
-    today = today or date.today()
+    today = today or _edition_date()
     sources = _source_bundle(source_paths)
     if not sources:
         raise AIError("No source files were supplied to the AI editor")
@@ -282,7 +292,7 @@ def generate_articles(source_paths, today=None):
 
     output_dir = DATA_DIR / "articles"
     output_dir.mkdir(parents=True, exist_ok=True)
-    edition_day = (today or date.today()).isoformat()
+    edition_day = (today or _edition_date()).isoformat()
     written = set()
     for index, article in enumerate(articles, 1):
         identity = f"{edition_day}:{index}:{article['title']}"
@@ -312,6 +322,7 @@ def generate_articles(source_paths, today=None):
 
     edition = payload.get("edition") if isinstance(payload.get("edition"), dict) else {}
     edition_content = {
+        "date": edition_day,
         "headline": str(edition.get("headline") or "").strip(),
         "subheading": str(edition.get("subheading") or "").strip(),
     }
