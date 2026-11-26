@@ -16,6 +16,10 @@ def load_with_env(monkeypatch, values):
         "KOBO_SOURCE_ARCHIVE_DIR", "KOBO_OUTPUT_INGEST_DIRS",
         "KOBO_FONTS_DIR", "KOBO_MASTHEAD_FONT", "KOBO_SERIF_BOLD_FONT",
         "KOBO_SERIF_REGULAR_FONT", "KOBO_LEAD_IMAGE_AVOID_FACES",
+        "KOBO_AI_PROVIDER", "KOBO_AI_BASE_URL", "KOBO_AI_API_KEY",
+        "KOBO_AI_MODEL", "KOBO_AI_TIMEOUT_SECONDS", "KOBO_AI_MAX_TOKENS",
+        "KOBO_AI_CONTEXT", "KOBO_AI_EXPECTED_OUTPUT", "KOBO_AI_SYSTEM_PROMPT",
+        "KOBO_AI_SKILLS_DIR",
     ):
         monkeypatch.delenv(key, raising=False)
     for key, value in values.items():
@@ -29,6 +33,9 @@ def test_defaults(monkeypatch):
     assert cfg["max_age_days"] == 7
     assert cfg["output_ingest_dirs"] == []
     assert cfg["lead_image_avoid_faces"] is True
+    assert cfg["ai_provider"] == "openai-compatible"
+    assert cfg["ai_model"] == "local-model"
+    assert cfg["ai_timeout_seconds"] == 180
 
 
 def test_environment_values(monkeypatch):
