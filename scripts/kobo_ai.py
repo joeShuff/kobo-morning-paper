@@ -25,7 +25,7 @@ Editorial rules:
 - Set each article's published field to the local edition date. Put event dates and original source dates in the article body where relevant.
 - Combine related sources where it improves the paper; do not force every source into a separate article.
 - Do not simply repeat source text. Write clear headlines, concise standfirsts and engaging article copy suitable for an e-reader newspaper.
-- Keep useful detail. Do not add citations or sources that were not supplied.
+- Keep useful detail. Do not add citations or sources that were not supplied. Reuse an image URL only when it was supplied with the source; otherwise return null.
 - Return ONLY valid JSON matching the required output contract. Do not wrap it in Markdown fences or add commentary.
 
 Required JSON shape:
@@ -201,11 +201,14 @@ def _fetch_article_text(url):
     metadata = trafilatura.extract_metadata(downloaded)
     title = getattr(metadata, "title", None) if metadata else None
     published = getattr(metadata, "date", None) if metadata else None
+    image = getattr(metadata, "image", None) if metadata else None
     heading = f"ARTICLE URL: {url}"
     if title:
         heading += f"\nARTICLE TITLE: {title}"
     if published:
         heading += f"\nSOURCE PUBLISHED DATE: {published}"
+    if image:
+        heading += f"\nSOURCE IMAGE URL: {image}"
     return heading + "\nEXTRACTED ARTICLE TEXT:\n" + text
 
 
