@@ -33,6 +33,7 @@ LOG = BASE / "build.log"
 
 PAPER_TITLE = CFG["paper_title"]
 PAPER_TAGLINE = CFG["paper_tagline"]
+EDITION_CONTENT = {}
 OUTPUT_INGEST_DIRS = CFG.get("output_ingest_dirs", [])
 
 
@@ -421,9 +422,15 @@ def generate_cover(articles: list[dict]) -> "Path | None":
         d.line([(M, y + 7), (W - M, y + 7)], fill=black, width=1)
         y += 22
         tag = _font(SERIF_R, 26)
-        tagt = PAPER_TAGLINE
+        tagt = EDITION_CONTENT.get("subheading") or PAPER_TAGLINE
         d.text(((W - d.textlength(tagt, font=tag)) / 2, y), tagt, font=tag, fill=gray)
         y += 46
+        if EDITION_CONTENT.get("headline"):
+            edition_font = _font(SERIF_B, 30)
+            for line in _wrap(d, EDITION_CONTENT["headline"], edition_font, W - 2 * M)[:2]:
+                d.text(((W - d.textlength(line, font=edition_font)) / 2, y), line, font=edition_font, fill=black)
+                y += edition_font.getbbox("Tg")[3] + 4
+            y += 8
         d.line([(M, y), (W - M, y)], fill=black, width=1)
         y += 9
         small = _font(SERIF_R, 20)
@@ -578,7 +585,11 @@ def build_front_page(book, articles: list[dict]):
     y += mast.getbbox("Tg")[3] + 24
     d.line([(M, y), (W - M, y)], fill=BLACK, width=4); d.line([(M, y + 9), (W - M, y + 9)], fill=BLACK, width=1); y += 28
     tag = _font(SERIF_R, 30)
-    d.text(((W - d.textlength(PAPER_TAGLINE, font=tag)) / 2, y), PAPER_TAGLINE, font=tag, fill=GRAY); y += 50
+    tagline = EDITION_CONTENT.get("subheading") or PAPER_TAGLINE
+    d.text(((W - d.textlength(tagline, font=tag)) / 2, y), tagline, font=tag, fill=GRAY); y += 50
+    if EDITION_CONTENT.get("headline"):
+        edition_font = _font(SERIF_B, 34)
+        y = wrap_draw(d, EDITION_CONTENT["headline"], edition_font, M, y, CW, BLACK, 4, 2) + 8
     d.line([(M, y), (W - M, y)], fill=BLACK, width=1); y += 12
     small = _font(SERIF_R, 23)
     d.text((M, y), f"VOL. I   No. {edition}", font=small, fill=BLACK)
@@ -685,9 +696,18 @@ def build_epub(articles: list[dict]) -> None:
                                       a["url"], a["domain"])
         disp_title = f"{a['title']} ({full_min} min)"
         ch = epub.EpubHtml(title=disp_title, file_name=f"art_{i}.xhtml", lang="en")
-        head = (f"<h1>{a['title']}</h1>"
-                f"<p style='color:#666'>{a['domain']} &middot; {a.get('published','')}"
-                f" &middot; {full_min} min &middot; <a href='{a['url']}'>source</a></p><hr/>")
+        import html as _html
+        section = _html.escape(str(a.get("section") or ""))
+        dek = _html.escape(str(a.get("dek") or ""))
+        safe_title = _html.escape(str(a["title"]))
+        safe_domain = _html.escape(str(a.get("domain", "")))
+        source_link = (f" &middot; <a href='{_html.escape(a['url'], quote=True)}'>source</a>"
+                       if str(a.get("url") or "").startswith(("http://", "https://")) else "")
+        head = (f"<p style='color:#666'>{section}</p>" if section else "")
+        head += (f"<h1>{safe_title}</h1>"
+                 + (f"<p><em>{dek}</em></p>" if dek else "")
+                 + f"<p style='color:#666'>{safe_domain} &middot; {a.get('published','')}"
+                 + f" &middot; {full_min} min{source_link}</p><hr/>")
         # "More in this edition" footer: real cross-navigation between articles AND it
         # pads every chapter past ~5000 characters. The Kobo shows a footnote-style
         # POPUP (instead of navigating) for in-book links whose target is under 5000
@@ -774,7 +794,7 @@ def publish_to_output_ingest_dirs() -> bool:
 
 def main(argv=None) -> int:
     global BASE, QUEUE, ARTICLES, EPUB_OUT, LOG, FONTS, MAST_FONT, SERIF_B, SERIF_R
-    global COVER_OUT, EDITION_FILE
+    global COVER_OUT, EDITION_FILE, EDITION_CONTENT
     argv = sys.argv[1:] if argv is None else argv
     dry = None
     if "--dry-build" in argv:
@@ -791,6 +811,14 @@ def main(argv=None) -> int:
         SERIF_R = str(FONTS / CFG["serif_regular_font"])
         COVER_OUT, EDITION_FILE = BASE / "cover.jpg", BASE / "edition.txt"
     BASE.mkdir(parents=True, exist_ok=True)
+    try:
+        EDITION_CONTENT = json.loads((BASE / "edition-content.json").read_text(encoding="utf-8"))
+        if not isinstance(EDITION_CONTENT, dict):
+            EDITION_CONTENT = {}
+        if EDITION_CONTENT.get("date") != edition_date().isoformat():
+            EDITION_CONTENT = {}
+    except (OSError, ValueError):
+        EDITION_CONTENT = {}
     urls = [] if dry else read_queue()
     if not urls and not any(ARTICLES.glob("*.json")):
         log("nothing queued and no stored articles; nothing to build")
@@ -798,6 +826,8 @@ def main(argv=None) -> int:
     added, failed = store_new(urls)
     if failed:
         log("failed URLs: " + ", ".join(f"{reason}: {url}" for url, reason in failed))
+        # Keep the queue and source inbox intact so failed fetches can be retried.
+        return 1
     articles = load_all_articles()
     if not articles:
         log("no articles could be extracted; not publishing")
@@ -810,7 +840,7 @@ def main(argv=None) -> int:
         log("one or more output ingest folders failed; keeping queue for retry")
         return 1
     # Clear only after the EPUB is built and every configured output has received it.
-    # Failed article URLs have already been logged and are intentionally dropped.
+    # Failed article URLs are rejected above so the queue can be retried.
     QUEUE.write_text("")
     log(f"DONE: +{added} new, {len(failed)} failed, {len(articles)} total in digest -> {EPUB_OUT}")
     return 0

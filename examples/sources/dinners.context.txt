@@ -1,0 +1,3 @@
+These are the household dinner plans for the next few days.
+Treat them as upcoming plans, not as a report of meals already eaten.
+The source producer may use relative dates such as today and tomorrow.
