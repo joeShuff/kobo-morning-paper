@@ -246,7 +246,8 @@ def _normalise_articles(payload, source_paths, today=None):
         if not title or not body:
             raise AIError(f"AI article {index} must include a headline and body")
         url = item.get("url")
-        if not isinstance(url, str) or urlparse(url).scheme not in {"http", "https"}:
+        parsed_url = urlparse(url) if isinstance(url, str) else None
+        if not parsed_url or parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
             url = ""
         section = str(item.get("section") or "From your sources").strip()
         domain = urlparse(url).netloc.replace("www.", "") if url else section
@@ -282,10 +283,12 @@ def generate_articles(source_paths, today=None):
     output_dir = DATA_DIR / "articles"
     output_dir.mkdir(parents=True, exist_ok=True)
     edition_day = (today or date.today()).isoformat()
+    written = set()
     for index, article in enumerate(articles, 1):
         identity = f"{edition_day}:{index}:{article['title']}"
         filename = "ai-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20] + ".json"
         destination = output_dir / filename
+        written.add(destination)
         fd, temp_name = tempfile.mkstemp(prefix=".ai-article-", suffix=".tmp", dir=output_dir)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -294,4 +297,31 @@ def generate_articles(source_paths, today=None):
         finally:
             if os.path.exists(temp_name):
                 os.unlink(temp_name)
-    return articles, payload.get("edition") if isinstance(payload.get("edition"), dict) else {}
+
+    # A retry can produce a different set of articles. Remove only this edition's
+    # previous AI cache records so old headlines do not leak into the new edition.
+    for existing in output_dir.glob("ai-*.json"):
+        if existing in written:
+            continue
+        try:
+            previous = json.loads(existing.read_text(encoding="utf-8"))
+            if str(previous.get("saved", "")).startswith(edition_day):
+                existing.unlink()
+        except (OSError, ValueError, AttributeError):
+            continue
+
+    edition = payload.get("edition") if isinstance(payload.get("edition"), dict) else {}
+    edition_content = {
+        "headline": str(edition.get("headline") or "").strip(),
+        "subheading": str(edition.get("subheading") or "").strip(),
+    }
+    edition_path = DATA_DIR / "edition-content.json"
+    fd, temp_name = tempfile.mkstemp(prefix=".edition-content-", suffix=".tmp", dir=DATA_DIR)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(edition_content, handle, ensure_ascii=False)
+        os.replace(temp_name, edition_path)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+    return articles, edition_content
