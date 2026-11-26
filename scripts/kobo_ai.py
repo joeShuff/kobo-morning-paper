@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from kobo_config import CFG, DATA_DIR
+from kobo_config import DATA_DIR
 
 DEFAULT_SYSTEM_PROMPT = """You are the editor of a daily newspaper. Turn the supplied source material into a useful, readable newspaper edition.
 
@@ -57,13 +57,19 @@ def _setting(name, default=""):
 def _endpoint(provider, base_url):
     if provider == "anthropic":
         return (base_url or "https://api.anthropic.com/v1").rstrip("/") + "/messages"
-    base = (base_url or "https://api.openai.com/v1").rstrip("/")
+    if provider == "openai":
+        base = (base_url or "https://api.openai.com/v1").rstrip("/")
+    else:
+        if not base_url:
+            raise AIError("KOBO_AI_BASE_URL is required for the openai-compatible provider")
+        base = base_url.rstrip("/")
     return base if base.endswith("/chat/completions") else base + "/chat/completions"
 
 
 def _request_completion(system_prompt, user_prompt):
     provider = _setting("KOBO_AI_PROVIDER", "openai-compatible").lower()
-    model = _setting("KOBO_AI_MODEL", "local-model")
+    default_model = {"openai": "gpt-4.1-mini", "anthropic": "claude-sonnet-4-5", "openai-compatible": "local-model"}.get(provider, "local-model")
+    model = _setting("KOBO_AI_MODEL") or default_model
     base_url = _setting("KOBO_AI_BASE_URL")
     api_key = _setting("KOBO_AI_API_KEY")
     try:
