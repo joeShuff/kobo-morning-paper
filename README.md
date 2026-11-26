@@ -17,7 +17,7 @@ If the AI request, response validation, EPUB build or publishing fails, the sour
 
 ## Source files
 
-A source is any non-hidden UTF-8 text file in the source inbox. .txt, .md, .text, .json, .jsonl, .urls and other text formats are all treated as text; the application does not require a source schema or try to parse the content.
+A source is any non-hidden UTF-8 text file in the source inbox. .txt, .md, .text, .json, .jsonl, .urls and other text formats are all treated as text; the application does not require a source schema or try to parse the content. Producers should write to a temporary filename and rename the completed file into the inbox, so the runner never reads a half-written source.
 
 For example, a producer could write **dinners.txt**:
 
