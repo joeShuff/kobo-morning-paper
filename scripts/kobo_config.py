@@ -29,10 +29,7 @@ def _int(name: str, default: int) -> int:
 
 
 def load() -> dict:
-    """Read settings from environment variables, falling back to built-in defaults.
-
-    KOBO_OUTPUT_INGEST_DIRS is a comma-separated list of container-visible paths.
-    """
+    """Read settings from environment variables, falling back to built-in defaults."""
     return {
         "data_dir": os.getenv("KOBO_DATA_DIR", "/data"),
         "paper_title": os.getenv("KOBO_PAPER_TITLE", "The Morning Paper"),
@@ -49,6 +46,16 @@ def load() -> dict:
         "serif_bold_font": os.getenv("KOBO_SERIF_BOLD_FONT", "PT_Serif-Web-Bold.ttf"),
         "serif_regular_font": os.getenv("KOBO_SERIF_REGULAR_FONT", "PT_Serif-Web-Regular.ttf"),
         "lead_image_avoid_faces": _bool("KOBO_LEAD_IMAGE_AVOID_FACES", True),
+        "ai_provider": os.getenv("KOBO_AI_PROVIDER", "openai-compatible"),
+        "ai_base_url": os.getenv("KOBO_AI_BASE_URL", ""),
+        "ai_api_key": os.getenv("KOBO_AI_API_KEY", ""),
+        "ai_model": os.getenv("KOBO_AI_MODEL", "local-model"),
+        "ai_timeout_seconds": _int("KOBO_AI_TIMEOUT_SECONDS", 180),
+        "ai_max_tokens": _int("KOBO_AI_MAX_TOKENS", 6000),
+        "ai_context": os.getenv("KOBO_AI_CONTEXT", ""),
+        "ai_expected_output": os.getenv("KOBO_AI_EXPECTED_OUTPUT", ""),
+        "ai_system_prompt": os.getenv("KOBO_AI_SYSTEM_PROMPT", ""),
+        "ai_skills_dir": os.getenv("KOBO_AI_SKILLS_DIR", ""),
     }
 
 
