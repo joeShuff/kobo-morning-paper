@@ -1,45 +1,55 @@
-"""Small configuration surface for the source-ingest newspaper generator.
-
-All content discovery and preparation happens upstream. This application only
-reads prepared source files, builds the EPUB, and publishes it.
-"""
-import json
+"""Environment-based configuration and defaults for the newspaper generator."""
 import os
 from pathlib import Path
 
-DEFAULTS = {
-    "data_dir": "~/kobo-articles",
-    "paper_title": "The Morning Paper",
-    "paper_tagline": "All the Reads Worth Your Time",
-    "max_age_days": 7,
-    "source_ingest_dir": "",
-    "source_archive_dir": "",
-    "output_ingest_dirs": [],
-    "fonts_dir": "fonts",
-    "masthead_font": "UnifrakturMaguntia-Book.ttf",
-    "serif_bold_font": "PT_Serif-Web-Bold.ttf",
-    "serif_regular_font": "PT_Serif-Web-Regular.ttf",
-    "lead_image_avoid_faces": True,
-}
+
+def _bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean (true/false, yes/no, 1/0)")
 
 
-def config_path() -> Path:
-    env = os.environ.get("KOBO_PAPER_CONFIG")
-    if env:
-        return Path(env).expanduser()
-    for path in (Path.cwd() / "config.json", Path(__file__).resolve().parent.parent / "config.json"):
-        if path.exists():
-            return path
-    return Path("config.json")
+def _int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if parsed < 0:
+        raise ValueError(f"{name} must be zero or greater")
+    return parsed
 
 
 def load() -> dict:
-    cfg = dict(DEFAULTS)
-    path = config_path()
-    if path.exists():
-        cfg.update({key: value for key, value in json.loads(path.read_text()).items()
-                    if not key.startswith("_")})
-    return cfg
+    """Read settings from environment variables, falling back to built-in defaults.
+
+    KOBO_OUTPUT_INGEST_DIRS is a comma-separated list of container-visible paths.
+    """
+    return {
+        "data_dir": os.getenv("KOBO_DATA_DIR", "/data"),
+        "paper_title": os.getenv("KOBO_PAPER_TITLE", "The Morning Paper"),
+        "paper_tagline": os.getenv("KOBO_PAPER_TAGLINE", "All the Reads Worth Your Time"),
+        "max_age_days": _int("KOBO_MAX_AGE_DAYS", 7),
+        "source_ingest_dir": os.getenv("KOBO_SOURCE_INGEST_DIR", ""),
+        "source_archive_dir": os.getenv("KOBO_SOURCE_ARCHIVE_DIR", ""),
+        "output_ingest_dirs": [
+            item.strip() for item in os.getenv("KOBO_OUTPUT_INGEST_DIRS", "").split(",")
+            if item.strip()
+        ],
+        "fonts_dir": os.getenv("KOBO_FONTS_DIR", "fonts"),
+        "masthead_font": os.getenv("KOBO_MASTHEAD_FONT", "UnifrakturMaguntia-Book.ttf"),
+        "serif_bold_font": os.getenv("KOBO_SERIF_BOLD_FONT", "PT_Serif-Web-Bold.ttf"),
+        "serif_regular_font": os.getenv("KOBO_SERIF_REGULAR_FONT", "PT_Serif-Web-Regular.ttf"),
+        "lead_image_avoid_faces": _bool("KOBO_LEAD_IMAGE_AVOID_FACES", True),
+    }
 
 
 CFG = load()

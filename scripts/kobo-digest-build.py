@@ -6,7 +6,7 @@
 3. Copy the dated EPUB atomically into each configured output ingest folder.
 
 The local EPUB is always written to data_dir. External ingest folders are optional
-and configured with output_ingest_dirs in config.json.
+and configured with KOBO_OUTPUT_INGEST_DIRS.
 """
 import json
 import os
@@ -373,7 +373,7 @@ def _has_prominent_face(url: str) -> bool:
     """True if the image shows a prominent human face; product/hardware/illustration
     shots return False. Used to keep front-page lead images off person-centered photos.
     Needs opencv-python-headless; without it this always returns False. Turn it off with
-    "lead_image_avoid_faces": false in config.json."""
+    "KOBO_LEAD_IMAGE_AVOID_FACES=false"."""
     if not CFG.get("lead_image_avoid_faces", True):
         return False
     im = _download_image(url)

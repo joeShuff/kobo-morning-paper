@@ -4,14 +4,26 @@ services:
     container_name: kobo-morning-paper
     restart: unless-stopped
     environment:
-      TZ: Europe/London
-      # Keep this aligned with the timezone used for the 03:00 schedule.
-      KOBO_PAPER_CONFIG: /config/config.json
+      # The schedule uses this timezone and runs at KOBO_SCHEDULE_TIME.
+      TZ: ${TZ:-Europe/London}
+      KOBO_DATA_DIR: ${KOBO_DATA_DIR:-/data}
+      KOBO_PAPER_TITLE: ${KOBO_PAPER_TITLE:-The Morning Paper}
+      KOBO_PAPER_TAGLINE: ${KOBO_PAPER_TAGLINE:-All the Reads Worth Your Time}
+      KOBO_MAX_AGE_DAYS: ${KOBO_MAX_AGE_DAYS:-7}
+      KOBO_SOURCE_INGEST_DIR: ${KOBO_SOURCE_INGEST_DIR:-}
+      KOBO_SOURCE_ARCHIVE_DIR: ${KOBO_SOURCE_ARCHIVE_DIR:-}
+      KOBO_OUTPUT_INGEST_DIRS: ${KOBO_OUTPUT_INGEST_DIRS:-}
+      KOBO_FONTS_DIR: ${KOBO_FONTS_DIR:-fonts}
+      KOBO_MASTHEAD_FONT: ${KOBO_MASTHEAD_FONT:-UnifrakturMaguntia-Book.ttf}
+      KOBO_SERIF_BOLD_FONT: ${KOBO_SERIF_BOLD_FONT:-PT_Serif-Web-Bold.ttf}
+      KOBO_SERIF_REGULAR_FONT: ${KOBO_SERIF_REGULAR_FONT:-PT_Serif-Web-Regular.ttf}
+      KOBO_LEAD_IMAGE_AVOID_FACES: ${KOBO_LEAD_IMAGE_AVOID_FACES:-true}
+      KOBO_SCHEDULE_TIME: ${KOBO_SCHEDULE_TIME:-03:00}
+      KOBO_SCHEDULER_RETRY_MINUTES: ${KOBO_SCHEDULER_RETRY_MINUTES:-15}
+      KOBO_SCHEDULER_POLL_SECONDS: ${KOBO_SCHEDULER_POLL_SECONDS:-20}
     volumes:
       # Persistent queue, article cache, generated EPUB, source inbox and archive.
       - ./data:/data
-      # Keep secrets and host-specific paths out of the image.
-      - ./config.json:/config/config.json:ro
-      # Optional: mount a destination folder and add its container path to
-      # output_ingest_dirs in config.json.
+      # Optional: mount a destination folder and set KOBO_OUTPUT_INGEST_DIRS
+      # to its container path (multiple paths can be comma-separated).
       # - /path/to/bookorbit/ingest:/output/bookorbit
