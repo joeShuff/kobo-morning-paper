@@ -105,3 +105,21 @@ def test_anthropic_provider_uses_messages_api(monkeypatch):
     assert captured["url"] == "https://api.anthropic.com/v1/messages"
     assert captured["headers"]["x-api-key"] == "test-key"
     assert captured["json"]["system"] == "system"
+
+
+def test_urls_in_source_are_expanded_before_prompting(monkeypatch):
+    fetched = []
+
+    def fake_fetch(url):
+        fetched.append(url)
+        return "ARTICLE TITLE: Example\nEXTRACTED ARTICLE TEXT:\nFull article text."
+
+    monkeypatch.setattr(kobo_ai, "_fetch_article_text", fake_fetch)
+    cache = {}
+    prompt_source = kobo_ai._expand_urls(
+        "Read this: https://example.com/story and https://example.com/story",
+        cache,
+    )
+    assert fetched == ["https://example.com/story"]
+    assert "Full article text." in prompt_source
+    assert "https://example.com/story" not in prompt_source
