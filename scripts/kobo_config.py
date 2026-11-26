@@ -51,6 +51,7 @@ def load() -> dict:
         "ai_api_key": os.getenv("KOBO_AI_API_KEY", ""),
         "ai_model": os.getenv("KOBO_AI_MODEL", "local-model"),
         "ai_timeout_seconds": _int("KOBO_AI_TIMEOUT_SECONDS", 180),
+        "ai_source_fetch_timeout_seconds": _int("KOBO_AI_SOURCE_FETCH_TIMEOUT_SECONDS", 30),
         "ai_max_tokens": _int("KOBO_AI_MAX_TOKENS", 6000),
         "ai_context": os.getenv("KOBO_AI_CONTEXT", ""),
         "ai_expected_output": os.getenv("KOBO_AI_EXPECTED_OUTPUT", ""),
