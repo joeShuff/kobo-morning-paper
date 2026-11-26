@@ -47,13 +47,13 @@ Use a clear heading and list each meal with its actual calendar date.
 Keep it concise.
 ~~~
 
-The AI receives the source and both companion files together. Companion files are archived alongside their source.
+The AI receives the source and both companion files together. Companion files are archived alongside their source. A complete working example is included in **examples/sources/**.
 
 ### Shared editorial skills
 
 Put reusable skill instructions in .md or .txt files under **KOBO_AI_SKILLS_DIR**. By default this is **<KOBO_DATA_DIR>/skills**.
 
-For example, **data/skills/coming-up.md** might explain how to turn schedules and upcoming dates into a newspaper article. All skill files are included in the prompt for each edition; the model applies the relevant ones.
+For example, **data/skills/coming-up.md** might explain how to turn schedules and upcoming dates into a newspaper article. The sample skill is in **examples/skills/coming-up.md**. All skill files are included in the prompt for each edition; the model applies the relevant ones.
 
 ### Prompt order
 
@@ -176,6 +176,8 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 export KOBO_DATA_DIR="$PWD/data"
 mkdir -p "$KOBO_DATA_DIR/source-ingest" "$KOBO_DATA_DIR/skills"
+cp examples/sources/* "$KOBO_DATA_DIR/source-ingest/"
+cp examples/skills/* "$KOBO_DATA_DIR/skills/"
 # Configure KOBO_AI_PROVIDER / KOBO_AI_BASE_URL / KOBO_AI_MODEL / KOBO_AI_API_KEY
 .venv/bin/python scripts/kobo-ingest-build.py
 ~~~
