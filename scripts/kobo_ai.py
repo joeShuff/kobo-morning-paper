@@ -237,7 +237,7 @@ def _parse_json(text):
 
 
 def _normalise_articles(payload, source_paths, today=None):
-    today = today or date.today()
+    today = today or _edition_date()
     if not isinstance(payload, dict):
         raise AIError("AI output must be a JSON object")
     articles = payload.get("articles", payload.get("stories"))
