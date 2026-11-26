@@ -148,7 +148,7 @@ def _request_completion(system_prompt, user_prompt):
         if not isinstance(content, str) or not content.strip():
             raise ValueError("empty response")
         return content.strip()
-    except (KeyError, IndexError, TypeError, ValueError) as exc:
+    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as exc:
         raise AIError("AI provider response did not contain a text completion") from exc
 
 
