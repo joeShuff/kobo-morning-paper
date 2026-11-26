@@ -18,6 +18,7 @@ def load_with_env(monkeypatch, values):
         "KOBO_SERIF_REGULAR_FONT", "KOBO_LEAD_IMAGE_AVOID_FACES",
         "KOBO_AI_PROVIDER", "KOBO_AI_BASE_URL", "KOBO_AI_API_KEY",
         "KOBO_AI_MODEL", "KOBO_AI_TIMEOUT_SECONDS", "KOBO_AI_MAX_TOKENS",
+        "KOBO_AI_SOURCE_FETCH_TIMEOUT_SECONDS",
         "KOBO_AI_CONTEXT", "KOBO_AI_EXPECTED_OUTPUT", "KOBO_AI_SYSTEM_PROMPT",
         "KOBO_AI_SKILLS_DIR",
     ):
@@ -36,6 +37,7 @@ def test_defaults(monkeypatch):
     assert cfg["ai_provider"] == "openai-compatible"
     assert cfg["ai_model"] == "local-model"
     assert cfg["ai_timeout_seconds"] == 180
+    assert cfg["ai_source_fetch_timeout_seconds"] == 30
 
 
 def test_environment_values(monkeypatch):
