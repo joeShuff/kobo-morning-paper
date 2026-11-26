@@ -702,7 +702,7 @@ def build_epub(articles: list[dict]) -> None:
         safe_title = _html.escape(str(a["title"]))
         safe_domain = _html.escape(str(a.get("domain", "")))
         source_link = (f" &middot; <a href='{_html.escape(a['url'], quote=True)}'>source</a>"
-                       if a.get("url", "").startswith(("http://", "https://")) else "")
+                       if str(a.get("url") or "").startswith(("http://", "https://")) else "")
         head = (f"<p style='color:#666'>{section}</p>" if section else "")
         head += (f"<h1>{safe_title}</h1>"
                  + (f"<p><em>{dek}</em></p>" if dek else "")
@@ -840,7 +840,7 @@ def main(argv=None) -> int:
         log("one or more output ingest folders failed; keeping queue for retry")
         return 1
     # Clear only after the EPUB is built and every configured output has received it.
-    # Failed article URLs have already been logged and are intentionally dropped.
+    # Failed article URLs are rejected above so the queue can be retried.
     QUEUE.write_text("")
     log(f"DONE: +{added} new, {len(failed)} failed, {len(articles)} total in digest -> {EPUB_OUT}")
     return 0
