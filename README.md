@@ -2,7 +2,7 @@
 
 A self-hosted daily newspaper pipeline. Other programs drop plain-text source files into an inbox; an AI editor turns the combined material into newspaper articles; the existing EPUB builder lays those articles out as a dated paper.
 
-The sources do not need to follow a fixed schema. They can contain full article text, rough notes, dates, lists, plans, URLs, or whatever context the producer has available.
+The sources do not need to follow a fixed schema. They can contain full article text, rough notes, dates, lists, plans, URLs, or whatever context the producer has available. HTTP(S) URLs found in a source are fetched and article text is extracted before the combined prompt is sent to the AI editor.
 
 ## How it works
 
@@ -110,7 +110,8 @@ For local models, set **KOBO_AI_BASE_URL** to the service's OpenAI-compatible /v
 | **KOBO_AI_BASE_URL** | required for compatible provider | Provider base URL, e.g. http://127.0.0.1:1234/v1. |
 | **KOBO_AI_API_KEY** | empty | API key for hosted providers or compatible services that require one. |
 | **KOBO_AI_MODEL** | Provider default | Model identifier expected by the selected endpoint. |
-| **KOBO_AI_TIMEOUT_SECONDS** | 180 | Request timeout. |
+| **KOBO_AI_TIMEOUT_SECONDS** | 180 | AI provider request timeout. |
+| **KOBO_AI_SOURCE_FETCH_TIMEOUT_SECONDS** | 30 | Timeout when retrieving article URLs found in source files. |
 | **KOBO_AI_MAX_TOKENS** | 6000 | Maximum completion tokens. |
 | **KOBO_AI_CONTEXT** | built-in general newspaper context | Global context prefix included before the sources. |
 | **KOBO_AI_EXPECTED_OUTPUT** | built-in JSON contract | Global output instructions included in the user prompt. |
@@ -194,7 +195,7 @@ The generated EPUB is **<KOBO_DATA_DIR>/read-later.epub**. Source files are read
 
 - **scripts/kobo-ingest-build.py**: source intake, build orchestration and archiving.
 - **scripts/kobo_ingest.py**: snapshots text sources and runs the editorial/build stages.
-- **scripts/kobo_ai.py**: prompt construction, provider adapters, response validation and article caching.
+- **scripts/kobo_ai.py**: URL extraction, prompt construction, provider adapters, response validation and article caching.
 - **scripts/kobo-digest-build.py**: render, fetch any legacy queued URLs and publish the EPUB.
 - **scripts/kobo_config.py**: environment-variable defaults.
 
