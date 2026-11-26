@@ -10,6 +10,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
+import trafilatura
+from trafilatura.utils import decode_file
 
 from kobo_config import DATA_DIR
 
@@ -171,14 +173,66 @@ def _load_skills():
     return skills
 
 
+def _fetch_article_text(url):
+    """Fetch and extract a URL supplied by a source file before asking the model to edit it."""
+    try:
+        response = requests.get(
+            url,
+            timeout=int(_setting("KOBO_AI_SOURCE_FETCH_TIMEOUT_SECONDS", "30")),
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; KoboMorningPaper/1.0)",
+                "Accept": "text/html,application/xhtml+xml",
+            },
+        )
+        response.raise_for_status()
+        downloaded = decode_file(response.content)
+    except (requests.RequestException, ValueError) as exc:
+        raise AIError(f"Could not retrieve source article {url}: {exc}") from exc
+
+    text = trafilatura.extract(
+        downloaded,
+        output_format="txt",
+        include_comments=False,
+        include_tables=True,
+        include_links=True,
+    )
+    if not text:
+        raise AIError(f"No readable article content could be extracted from {url}")
+    metadata = trafilatura.extract_metadata(downloaded)
+    title = getattr(metadata, "title", None) if metadata else None
+    published = getattr(metadata, "date", None) if metadata else None
+    heading = f"ARTICLE URL: {url}"
+    if title:
+        heading += f"\\nARTICLE TITLE: {title}"
+    if published:
+        heading += f"\\nSOURCE PUBLISHED DATE: {published}"
+    return heading + "\\nEXTRACTED ARTICLE TEXT:\\n" + text
+
+
+def _expand_urls(content, cache):
+    """Replace URLs in source text with extracted article text; fetch each URL once."""
+    urls = []
+    for match in re.findall(r"https?://[^\\s<>\\\"']+", content):
+        url = match.rstrip(").,;]")
+        if url and url not in urls:
+            urls.append(url)
+    for url in urls:
+        if url not in cache:
+            cache[url] = _fetch_article_text(url)
+        content = content.replace(url, cache[url])
+    return content
+
+
 def _source_bundle(source_paths):
     sources = []
+    fetched_urls = {}
     for path in source_paths:
         context = _read_optional(path.with_name(path.stem + ".context.txt"))
         expected = _read_optional(path.with_name(path.stem + ".expected.txt"))
         content = _read_optional(path)
         if not content:
             raise AIError(f"Source file is empty: {path.name}")
+        content = _expand_urls(content, fetched_urls)
         sources.append({
             "name": path.name,
             "context": context,
