@@ -1,140 +1,196 @@
-# kobo-morning-paper: a daily newspaper EPUB
+# kobo-morning-paper
 
-A small, self-hosted pipeline that turns prepared article sources into a dated EPUB newspaper. Other programs are responsible for discovering, selecting and preparing content; this project consumes their files, builds the newspaper and publishes it.
+A self-hosted daily newspaper pipeline. Other programs drop plain-text source files into an inbox; an AI editor turns the combined material into newspaper articles; the existing EPUB builder lays those articles out as a dated paper.
 
-There is no built-in AI, interest model, source discovery, or integration with Audiobookshelf, Seerr, TikTok or Kickstarter.
+The sources do not need to follow a fixed schema. They can contain full article text, rough notes, dates, lists, plans, URLs, or whatever context the producer has available.
 
 ## How it works
 
-1. **Receive sources.** Other programs write source files into the source inbox.
-2. **Read and stage.** At the scheduled run, the ingest runner snapshots the inbox and parses supported files. URL-only entries are fetched and extracted with Trafilatura; entries containing article text or HTML are used directly.
-3. **Build the edition.** The existing article store is combined with the newly supplied content, filtered by the configured age limit, and rendered into a dated EPUB with a generated cover and tappable front page.
-4. **Publish.** The dated EPUB is copied atomically into each configured output ingest destination.
-5. **Archive inputs.** After the build and all output publishing succeed, the source files from that run are moved into the dated source archive. Files arriving during a run are left for the next edition.
+1. **Receive sources.** Plain-text files are dropped into the source inbox.
+2. **Add optional guidance.** A source can have companion context and expected-output files. Shared editorial skills can be placed in a skills directory.
+3. **Build the prompt.** The application sends all source material, source-specific guidance, shared skills, the global context prefix and the expected output instructions to one configured AI model.
+4. **Generate articles.** The AI returns structured JSON containing article sections, headlines, standfirsts and body text. The application validates this response and saves article records for the existing newspaper builder.
+5. **Build and publish.** The existing builder renders the articles into the dated EPUB and publishes it to configured output folders.
+6. **Archive inputs.** Source files and their companion guidance are archived only after the complete build and publishing step succeeds. Files arriving during a run wait for the next edition.
 
-The source inbox is input. Output ingest directories are destinations for the finished EPUB.
+If the AI request, response validation, EPUB build or publishing fails, the source files stay in the inbox for retry.
 
-## Source file formats
+## Source files
 
-- **`.txt`, `.urls`, `.list`** — one HTTP(S) article URL per line. Blank lines and lines beginning with `#` are ignored.
-- **`.json`** — an array of URLs/article objects, a single article object, or an object containing an `articles`, `items`, `urls`, `links`, or `data` array.
-- **`.jsonl`** — one URL string or article object per line.
+A source is any non-hidden UTF-8 text file in the source inbox. .txt, .md, .text, .json, .jsonl, .urls and other text formats are all treated as text; the application does not require a source schema or try to parse the content.
 
-An article object can include `url` (or `link`), `title`, `published` (or `date`), `domain`, `image`, and pre-extracted `html` or plain-text `content`/`text`. If article content is supplied, the generator does not fetch that URL.
+For example, a producer could write **dinners.txt**:
 
-Example:
-```json
+~~~text
+Today: pasta
+Tomorrow: curry
+Day after tomorrow: soup
+~~~
+
+Optional companion files use the same filename stem:
+
+- **dinners.context.txt** — context or a prefix explaining what this source represents.
+- **dinners.expected.txt** — what the AI should produce from this particular source.
+
+For example, **dinners.context.txt** could say:
+
+~~~text
+These are the household dinner plans for the next few days.
+Treat the dates as upcoming plans, not as a report of meals already eaten.
+~~~
+
+And **dinners.expected.txt** could say:
+
+~~~text
+Turn this into a short newspaper article in a "Coming up" section.
+Use a clear heading and list each meal with its actual calendar date.
+Keep it concise.
+~~~
+
+The AI receives the source and both companion files together. Companion files are archived alongside their source.
+
+### Shared editorial skills
+
+Put reusable skill instructions in .md or .txt files under **KOBO_AI_SKILLS_DIR**. By default this is **<KOBO_DATA_DIR>/skills**.
+
+For example, **data/skills/coming-up.md** might explain how to turn schedules and upcoming dates into a newspaper article. All skill files are included in the prompt for each edition; the model applies the relevant ones.
+
+### Prompt order
+
+The prompt sent to the model contains:
+
+1. Current local date and timezone, so relative dates can be resolved.
+2. Global paper context from **KOBO_AI_CONTEXT**.
+3. Global expected-output instructions from **KOBO_AI_EXPECTED_OUTPUT**.
+4. All shared skill files.
+5. For each source: its context prefix, expected-output instructions and raw text.
+
+The built-in system prompt explains the editorial role, prevents unsupported factual invention, and requires a predictable JSON response. **KOBO_AI_SYSTEM_PROMPT** can replace that complete system prompt when a different editorial workflow is wanted.
+
+## AI output contract
+
+The model must return a JSON object with an **articles** array. Each article must contain a headline and body. Optional fields are section, dek/standfirst, source, published date, URL and image.
+
+~~~json
 {
   "articles": [
-    {"url": "https://example.com/story", "title": "A story"},
     {
-      "url": "https://example.com/another-story",
-      "title": "Another story",
-      "published": "2026-11-25",
-      "text": "The already extracted article text."
+      "section": "Coming up",
+      "headline": "Three dinners to look forward to",
+      "dek": "A look at the meals planned for the next few evenings.",
+      "body": "Thursday, 26 November: Pasta.\n\nFriday, 27 November: Curry.\n\nSaturday, 28 November: Soup.",
+      "source": "dinners.txt",
+      "published": "2026-11-26",
+      "url": null,
+      "image": null
     }
   ]
 }
-```
+~~~
 
-**For producers:** write to a temporary filename and rename it into the inbox only when complete. The runner snapshots the inbox at startup. Unsupported or malformed files are left in place and reported; source files are archived only after the EPUB build and publishing succeed.
+The application converts the plain-text article body into safe HTML paragraphs and stores the result in the existing article cache. The EPUB builder uses the section, headline, standfirst and body when rendering the article. The model can create one article from several sources or several articles from one source.
 
-## Environment variables
+## AI providers
 
-There is no configuration file. Every setting is an environment variable with a built-in default. In Docker Compose, values can be supplied in a `.env` file next to `compose.yaml`; Compose automatically reads it. Start with:
+The AI integration uses a small provider adapter and environment variables. It supports:
 
-```sh
-cp .env.example .env
-```
+- **openai-compatible** — any service exposing the OpenAI Chat Completions API, including Ollama's OpenAI-compatible endpoint, LM Studio, LocalAI, vLLM and llama.cpp server. This is the default provider and does not require an API key.
+- **openai** — the OpenAI API.
+- **anthropic** — the Anthropic Messages API (Claude).
+
+For local models, set **KOBO_AI_BASE_URL** to the service's OpenAI-compatible /v1 endpoint. For OpenAI and Anthropic, the standard API endpoint is used unless a custom base URL is supplied.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TZ` | `Europe/London` | Container timezone; controls local scheduling and edition dates. |
-| `KOBO_SCHEDULE_TIME` | `03:00` | Daily scheduler time, 24-hour `HH:MM`. |
-| `KOBO_DATA_DIR` | `/data` | Persistent working directory for queue, cache, logs and EPUB. |
-| `KOBO_SOURCE_INGEST_DIR` | `/data/source-ingest` | Inbox for source files. |
-| `KOBO_SOURCE_ARCHIVE_DIR` | `/data/source-archive` | Processed source files, archived under a date folder. |
-| `KOBO_OUTPUT_INGEST_DIRS` | *(empty)* | Comma-separated list of existing output folders for the finished EPUB. |
-| `KOBO_PAPER_TITLE` | `The Morning Paper` | Newspaper title. |
-| `KOBO_PAPER_TAGLINE` | `All the Reads Worth Your Time` | Cover/front-page tagline. |
-| `KOBO_MAX_AGE_DAYS` | `7` | Exclude articles older than this many days. |
-| `KOBO_FONTS_DIR` | `fonts` | Font directory; relative paths are resolved under the data directory. |
-| `KOBO_MASTHEAD_FONT` | `UnifrakturMaguntia-Book.ttf` | Masthead font filename. |
-| `KOBO_SERIF_BOLD_FONT` | `PT_Serif-Web-Bold.ttf` | Bold serif font filename. |
-| `KOBO_SERIF_REGULAR_FONT` | `PT_Serif-Web-Regular.ttf` | Regular serif font filename. |
-| `KOBO_LEAD_IMAGE_AVOID_FACES` | `true` | Skip prominent faces when choosing lead/front-page images. |
-| `KOBO_SCHEDULER_RETRY_MINUTES` | `15` | Minutes between retries after a failed scheduled build. |
-| `KOBO_SCHEDULER_POLL_SECONDS` | `20` | How often the scheduler checks whether the build is due. |
+| **KOBO_AI_PROVIDER** | openai-compatible | openai-compatible, openai or anthropic. |
+| **KOBO_AI_BASE_URL** | required for compatible provider | Provider base URL, e.g. http://127.0.0.1:1234/v1. |
+| **KOBO_AI_API_KEY** | empty | API key for hosted providers or compatible services that require one. |
+| **KOBO_AI_MODEL** | Provider default | Model identifier expected by the selected endpoint. |
+| **KOBO_AI_TIMEOUT_SECONDS** | 180 | Request timeout. |
+| **KOBO_AI_MAX_TOKENS** | 6000 | Maximum completion tokens. |
+| **KOBO_AI_CONTEXT** | built-in general newspaper context | Global context prefix included before the sources. |
+| **KOBO_AI_EXPECTED_OUTPUT** | built-in JSON contract | Global output instructions included in the user prompt. |
+| **KOBO_AI_SYSTEM_PROMPT** | built-in editorial system prompt | Replaces the complete built-in system prompt. |
+| **KOBO_AI_SKILLS_DIR** | <KOBO_DATA_DIR>/skills | Directory containing shared .md and .txt skill instructions. |
 
-`KOBO_OUTPUT_INGEST_DIRS` accepts comma-separated container paths, for example `/output/bookorbit,/output/another-library`. Each destination must already exist and be writable. If the value is empty, the EPUB remains in `KOBO_DATA_DIR`.
+Never commit API keys. Supply them through the process environment or a secret manager.
 
-The schedule runs in the timezone selected by `TZ`. For example, set `TZ=Europe/London` and `KOBO_SCHEDULE_TIME=04:15` to run at 4:15am UK local time, including daylight-saving changes.
+### Example: local OpenAI-compatible model
+
+~~~sh
+export KOBO_DATA_DIR="$PWD/data"
+export KOBO_AI_PROVIDER=openai-compatible
+export KOBO_AI_BASE_URL=http://127.0.0.1:1234/v1
+export KOBO_AI_MODEL=your-local-model-id
+python scripts/kobo-ingest-build.py
+~~~
+
+### Example: OpenAI
+
+~~~sh
+export KOBO_AI_PROVIDER=openai
+export KOBO_AI_API_KEY=your-api-key
+export KOBO_AI_MODEL=gpt-4.1-mini
+python scripts/kobo-ingest-build.py
+~~~
+
+### Example: Claude
+
+~~~sh
+export KOBO_AI_PROVIDER=anthropic
+export KOBO_AI_API_KEY=your-api-key
+export KOBO_AI_MODEL=claude-sonnet-4-5
+python scripts/kobo-ingest-build.py
+~~~
+
+The application does not load .env files itself; export variables in the shell, service manager or deployment environment. Docker/Compose integration for the new AI settings is deliberately left for a later step.
+
+## Existing newspaper settings
+
+The existing non-AI settings remain environment-driven:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| TZ | Europe/London | Local timezone and date handling. |
+| KOBO_DATA_DIR | /data | Persistent working directory. |
+| KOBO_SOURCE_INGEST_DIR | <KOBO_DATA_DIR>/source-ingest | Source inbox. |
+| KOBO_SOURCE_ARCHIVE_DIR | <KOBO_DATA_DIR>/source-archive | Processed source archive. |
+| KOBO_OUTPUT_INGEST_DIRS | empty | Comma-separated output folders for the finished EPUB. |
+| KOBO_PAPER_TITLE | The Morning Paper | Newspaper masthead. |
+| KOBO_PAPER_TAGLINE | All the Reads Worth Your Time | Masthead tagline. |
+| KOBO_MAX_AGE_DAYS | 7 | Maximum age of cached articles. |
+| KOBO_SCHEDULE_TIME | 03:00 | Built-in scheduler time, 24-hour HH:MM. |
+| KOBO_SCHEDULER_RETRY_MINUTES | 15 | Retry interval after a failed scheduled build. |
+| KOBO_SCHEDULER_POLL_SECONDS | 20 | Scheduler polling interval. |
 
 ## Run locally
 
-```sh
+~~~sh
 git clone https://github.com/joeShuff/kobo-morning-paper.git
 cd kobo-morning-paper
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-KOBO_DATA_DIR="$PWD/data" .venv/bin/python scripts/kobo-ingest-build.py
-```
+export KOBO_DATA_DIR="$PWD/data"
+mkdir -p "$KOBO_DATA_DIR/source-ingest" "$KOBO_DATA_DIR/skills"
+# Configure KOBO_AI_PROVIDER / KOBO_AI_BASE_URL / KOBO_AI_MODEL / KOBO_AI_API_KEY
+.venv/bin/python scripts/kobo-ingest-build.py
+~~~
 
-The generated EPUB is `<KOBO_DATA_DIR>/read-later.epub`. For local scheduling, use your system cron with the example in `crontab.example`; the built-in scheduler is used by Docker.
-
-To build from cached fixture articles without network access:
-
-```sh
-.venv/bin/python scripts/kobo-digest-build.py --dry-build /path/to/test-data
-```
-
-## Docker deployment
-
-The container runs its own scheduler, catches up after downtime and retries failed builds. The default schedule is 03:00 Europe/London.
-
-```sh
-git clone https://github.com/joeShuff/kobo-morning-paper.git newspaper
-cd newspaper
-mkdir -p data
-cp .env.example .env
-docker compose up -d --build
-docker compose logs -f newspaper
-```
-
-Drop source files into `./data/source-ingest` on the host. Working data, article cache, generated EPUB and dated archives persist under `./data`.
-
-A producer container can mount the same inbox:
-
-```yaml
-volumes:
-  - /path/to/newspaper/data/source-ingest:/newspaper-ingest
-```
-
-To publish the EPUB to another application, mount its ingest folder into this container and add the container-side mount path to `KOBO_OUTPUT_INGEST_DIRS` in `.env`:
-
-```yaml
-volumes:
-  - /path/to/bookorbit/ingest:/output/bookorbit
-```
-
-To trigger a build manually:
-
-```sh
-docker compose run --rm newspaper python scripts/kobo-ingest-build.py
-```
+The generated EPUB is **<KOBO_DATA_DIR>/read-later.epub**. Source files are read from **source-ingest**; successful inputs are moved into **source-archive/YYYY-MM-DD**.
 
 ## Tests
 
-```sh
+~~~sh
 .venv/bin/python -m pytest
-```
+~~~
 
 ## Main components
 
-- `scripts/kobo-ingest-build.py`: source intake, build orchestration and archiving.
-- `scripts/kobo_ingest.py`: source file parsing and staging helpers.
-- `scripts/kobo-digest-build.py`: fetch, extract, render, and publish the EPUB.
-- `scripts/kobo_config.py`: environment-variable loader and defaults.
+- **scripts/kobo-ingest-build.py**: source intake, build orchestration and archiving.
+- **scripts/kobo_ingest.py**: snapshots text sources and runs the editorial/build stages.
+- **scripts/kobo_ai.py**: prompt construction, provider adapters, response validation and article caching.
+- **scripts/kobo-digest-build.py**: render, fetch any legacy queued URLs and publish the EPUB.
+- **scripts/kobo_config.py**: environment-variable defaults.
 
 ## License
 
