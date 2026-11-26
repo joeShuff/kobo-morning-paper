@@ -73,6 +73,10 @@ The model must return a JSON object with an **articles** array. Each article mus
 
 ~~~json
 {
+  "edition": {
+    "headline": "Optional edition-wide headline",
+    "subheading": "Optional edition subheading"
+  },
   "articles": [
     {
       "section": "Coming up",
@@ -88,7 +92,7 @@ The model must return a JSON object with an **articles** array. Each article mus
 }
 ~~~
 
-The application converts the plain-text article body into safe HTML paragraphs and stores the result in the existing article cache. The EPUB builder uses the section, headline, standfirst and body when rendering the article. The model can create one article from several sources or several articles from one source.
+The application converts the plain-text article body into safe HTML paragraphs and stores the result in the existing article cache. The EPUB builder uses the section, headline, standfirst and body when rendering the article. The optional edition headline and subheading are rendered on the cover and front page. The model can create one article from several sources or several articles from one source.
 
 ## AI providers
 
