@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
@@ -58,7 +59,14 @@ def main():
             # AI configuration or a reachable model endpoint.
             from kobo_ai import AIError, generate_articles
             try:
-                articles, edition = generate_articles(source_files)
+                # Copy the startup snapshot, including any companion files, so files
+                # arriving or changing during the AI request are deferred to next run.
+                with tempfile.TemporaryDirectory(prefix=".source-snapshot-", dir=DATA_DIR) as temp_dir:
+                    snapshot_dir = Path(temp_dir)
+                    for path in files:
+                        shutil.copy2(path, snapshot_dir / path.name)
+                    snapshot_sources = [snapshot_dir / path.name for path in source_files]
+                    articles, edition = generate_articles(snapshot_sources)
             except AIError as exc:
                 print(f"AI editorial step failed: {exc}", file=sys.stderr)
                 return 1
