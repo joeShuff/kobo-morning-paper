@@ -20,6 +20,7 @@ Editorial rules:
 - Use the source-specific context, expected-output notes and skills to understand what each source is for.
 - A source may be a complete article, raw notes, a schedule, dates, a list, or only a URL. You may write connective explanation and turn structured notes into a readable article, but never invent factual details, events, dates, names, prices or outcomes.
 - Resolve relative dates such as today, tomorrow and the day after tomorrow using the supplied local date. State the actual dates when that helps readers.
+- Set each article's published field to the local edition date. Put event dates and original source dates in the article body where relevant.
 - Combine related sources where it improves the paper; do not force every source into a separate article.
 - Do not simply repeat source text. Write clear headlines, concise standfirsts and engaging article copy suitable for an e-reader newspaper.
 - Keep useful detail. Do not add citations or sources that were not supplied.
